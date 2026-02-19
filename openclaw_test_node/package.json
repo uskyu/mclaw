@@ -1,0 +1,22 @@
+{
+  "name": "openclaw-connection-test",
+  "version": "1.0.0",
+  "description": "OpenClaw Gateway 连接测试脚本",
+  "main": "test.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "openclaw",
+    "test",
+    "websocket"
+  ],
+  "author": "OpenClaw Flutter Client",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "optionalDependencies": {
+    "ws": "^8.19.0"
+  }
+}

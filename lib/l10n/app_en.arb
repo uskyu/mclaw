@@ -1,0 +1,179 @@
+{
+  "@@locale": "en",
+  "appTitle": "Lobster Chat",
+  "@appTitle": {
+    "description": "Application title"
+  },
+  "newChat": "New Chat",
+  "@newChat": {
+    "description": "New conversation button"
+  },
+  "searchConversations": "Search conversations",
+  "@searchConversations": {
+    "description": "Search bar placeholder"
+  },
+  "online": "Online",
+  "@online": {
+    "description": "User online status"
+  },
+  "inputHint": "Type a message...",
+  "@inputHint": {
+    "description": "Input field hint"
+  },
+  "selectAgent": "Select Agent",
+  "@selectAgent": {
+    "description": "Agent selector title"
+  },
+  "generalAssistant": "General Assistant",
+  "@generalAssistant": {
+    "description": "General agent name"
+  },
+  "generalAssistantDesc": "Can answer various questions",
+  "@generalAssistantDesc": {
+    "description": "General agent description"
+  },
+  "codeAssistant": "Code Assistant",
+  "@codeAssistant": {
+    "description": "Code agent name"
+  },
+  "codeAssistantDesc": "Focus on programming problems",
+  "@codeAssistantDesc": {
+    "description": "Code agent description"
+  },
+  "writingAssistant": "Writing Assistant",
+  "@writingAssistant": {
+    "description": "Writing agent name"
+  },
+  "writingAssistantDesc": "Article polishing and creative writing",
+  "@writingAssistantDesc": {
+    "description": "Writing agent description"
+  },
+  "messageOutline": "Message Outline",
+  "@messageOutline": {
+    "description": "Message outline drawer title"
+  },
+  "contextUsage": "Context Usage",
+  "@contextUsage": {
+    "description": "Context usage drawer title"
+  },
+  "subAgents": "Sub Agents",
+  "@subAgents": {
+    "description": "Sub agents drawer title"
+  },
+  "takePicture": "Take Picture",
+  "@takePicture": {
+    "description": "Camera button"
+  },
+  "photo": "Photo",
+  "@photo": {
+    "description": "Photo album button"
+  },
+  "file": "File",
+  "@file": {
+    "description": "File button"
+  },
+  "compressHistory": "Compress History",
+  "@compressHistory": {
+    "description": "Compress history button"
+  },
+  "clearContext": "Clear Context",
+  "@clearContext": {
+    "description": "Clear context button"
+  },
+  "aiServers": "AI Servers",
+  "@aiServers": {
+    "description": "Server management page title"
+  },
+  "currentUse": "Currently Using",
+  "@currentUse": {
+    "description": "Current server section"
+  },
+  "serverList": "Server List",
+  "@serverList": {
+    "description": "Server list section"
+  },
+  "addServer": "Add Server",
+  "@addServer": {
+    "description": "Add server button"
+  },
+  "delete": "Delete",
+  "@delete": {
+    "description": "Delete action"
+  },
+  "cancel": "Cancel",
+  "@cancel": {
+    "description": "Cancel action"
+  },
+  "settings": "Settings",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "appearance": "Appearance",
+  "@appearance": {
+    "description": "Appearance section"
+  },
+  "darkMode": "Dark Mode",
+  "@darkMode": {
+    "description": "Dark mode toggle"
+  },
+  "general": "General",
+  "@general": {
+    "description": "General section"
+  },
+  "language": "Language",
+  "@language": {
+    "description": "Language setting"
+  },
+  "notifications": "Notifications",
+  "@notifications": {
+    "description": "Notifications setting"
+  },
+  "privacy": "Privacy",
+  "@privacy": {
+    "description": "Privacy setting"
+  },
+  "about": "About",
+  "@about": {
+    "description": "About section"
+  },
+  "aboutApp": "About App",
+  "@aboutApp": {
+    "description": "About app item"
+  },
+  "help": "Help",
+  "@help": {
+    "description": "Help item"
+  },
+  "dangerZone": "Danger Zone",
+  "@dangerZone": {
+    "description": "Danger zone section"
+  },
+  "clearAllData": "Clear All Data",
+  "@clearAllData": {
+    "description": "Clear all data button"
+  },
+  "deleteAccount": "Delete Account",
+  "@deleteAccount": {
+    "description": "Delete account button"
+  },
+  "thinking": "Thinking...",
+  "@thinking": {
+    "description": "AI thinking indicator"
+  },
+  "startConversation": "Start a new conversation",
+  "@startConversation": {
+    "description": "Empty state subtitle"
+  },
+  "today": "Today",
+  "@today": {
+    "description": "Today timestamp"
+  },
+  "yesterday": "Yesterday",
+  "@yesterday": {
+    "description": "Yesterday timestamp"
+  },
+  "past7Days": "Past 7 Days",
+  "@past7Days": {
+    "description": "Past 7 days timestamp"
+  }
+}

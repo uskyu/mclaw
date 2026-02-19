@@ -14,9 +14,9 @@ enum GatewayConnectionState {
   error,
 }
 
-/// OpenClaw Gateway 协议消息
+/// Gateway 消息
 class GatewayMessage {
-  final String type; // 'req', 'res', 'event'
+  final String type;
   final String? id;
   final String? method;
   final Map<String, dynamic>? params;
@@ -24,6 +24,7 @@ class GatewayMessage {
   final Map<String, dynamic>? payload;
   final Map<String, dynamic>? error;
   final String? event;
+  final int? seq;
 
   GatewayMessage({
     required this.type,
@@ -34,6 +35,7 @@ class GatewayMessage {
     this.payload,
     this.error,
     this.event,
+    this.seq,
   });
 
   factory GatewayMessage.fromJson(Map<String, dynamic> json) {
@@ -46,39 +48,103 @@ class GatewayMessage {
       payload: json['payload'] as Map<String, dynamic>?,
       error: json['error'] as Map<String, dynamic>?,
       event: json['event'] as String?,
+      seq: json['seq'] as int?,
     );
   }
+}
 
-  Map<String, dynamic> toJson() {
-    final json = <String, dynamic>{'type': type};
-    if (id != null) json['id'] = id;
-    if (method != null) json['method'] = method;
-    if (params != null) json['params'] = params;
-    if (ok != null) json['ok'] = ok;
-    if (payload != null) json['payload'] = payload;
-    if (error != null) json['error'] = error;
-    if (event != null) json['event'] = event;
-    return json;
+/// Chat 发送响应
+class ChatSendResponse {
+  final String runId;
+  final String status;
+
+  ChatSendResponse({required this.runId, required this.status});
+
+  factory ChatSendResponse.fromJson(Map<String, dynamic> json) {
+    return ChatSendResponse(
+      runId: json['runId'] as String? ?? '',
+      status: json['status'] as String? ?? '',
+    );
+  }
+}
+
+/// Chat 事件负载
+class ChatEventPayload {
+  final String? runId;
+  final String? sessionKey;
+  final String? state;
+  final Map<String, dynamic>? message;
+  final String? errorMessage;
+
+  ChatEventPayload({
+    this.runId,
+    this.sessionKey,
+    this.state,
+    this.message,
+    this.errorMessage,
+  });
+
+  factory ChatEventPayload.fromJson(Map<String, dynamic> json) {
+    return ChatEventPayload(
+      runId: json['runId'] as String?,
+      sessionKey: json['sessionKey'] as String?,
+      state: json['state'] as String?,
+      message: json['message'] as Map<String, dynamic>?,
+      errorMessage: json['errorMessage'] as String?,
+    );
+  }
+}
+
+/// Agent 事件负载
+class AgentEventPayload {
+  final String runId;
+  final int? seq;
+  final String stream;
+  final int? ts;
+  final Map<String, dynamic> data;
+
+  AgentEventPayload({
+    required this.runId,
+    this.seq,
+    required this.stream,
+    this.ts,
+    required this.data,
+  });
+
+  factory AgentEventPayload.fromJson(Map<String, dynamic> json) {
+    return AgentEventPayload(
+      runId: json['runId'] as String? ?? '',
+      seq: json['seq'] as int?,
+      stream: json['stream'] as String? ?? '',
+      ts: json['ts'] as int?,
+      data: json['data'] as Map<String, dynamic>? ?? {},
+    );
   }
 }
 
 /// OpenClaw Gateway 协议服务
-/// 负责 WebSocket 连接和协议通信
 class GatewayProtocolService {
   WebSocketChannel? _channel;
   final _stateController = StreamController<GatewayConnectionState>.broadcast();
   final _messageController = StreamController<GatewayMessage>.broadcast();
-  final _pendingRequests = <String, Completer<GatewayMessage>>{};
+  final _chatEventController = StreamController<ChatEventPayload>.broadcast();
+  final _agentEventController = StreamController<AgentEventPayload>.broadcast();
+  final _pendingRequests = <String, Completer<Map<String, dynamic>>>{};
   
   GatewayConnectionState _currentState = GatewayConnectionState.disconnected;
   String? _lastError;
   String? _deviceToken;
+  int _tickIntervalMs = 15000;
 
   Stream<GatewayConnectionState> get stateStream => _stateController.stream;
   Stream<GatewayMessage> get messageStream => _messageController.stream;
+  Stream<ChatEventPayload> get chatEventStream => _chatEventController.stream;
+  Stream<AgentEventPayload> get agentEventStream => _agentEventController.stream;
   GatewayConnectionState get currentState => _currentState;
   String? get lastError => _lastError;
   String? get deviceToken => _deviceToken;
+  bool get isConnected => _currentState == GatewayConnectionState.connected;
+  int get tickIntervalMs => _tickIntervalMs;
 
   /// 连接到 Gateway WebSocket
   Future<void> connect(String wsUrl) async {
@@ -86,8 +152,6 @@ class GatewayProtocolService {
       _updateState(GatewayConnectionState.connecting);
       _lastError = null;
 
-      // 使用自定义 Origin header 避免 CORS 问题
-      // SSH 隧道已经将请求转发到本地，所以 Origin 应该是 localhost
       final socket = await WebSocket.connect(
         wsUrl,
         headers: {
@@ -97,7 +161,6 @@ class GatewayProtocolService {
       
       _channel = IOWebSocketChannel(socket);
       
-      // 监听消息
       _channel!.stream.listen(
         (data) => _handleMessage(data),
         onError: (error) {
@@ -105,6 +168,9 @@ class GatewayProtocolService {
           _updateState(GatewayConnectionState.error);
         },
         onDone: () {
+          if (_currentState == GatewayConnectionState.connected) {
+            _lastError = '连接已断开';
+          }
           _updateState(GatewayConnectionState.disconnected);
         },
       );
@@ -128,7 +194,6 @@ class GatewayProtocolService {
     try {
       _updateState(GatewayConnectionState.handshaking);
 
-      // 等待 challenge
       final challengeMsg = await _waitForEvent('connect.challenge', timeout: Duration(seconds: 10));
       if (challengeMsg == null) {
         throw Exception('未收到 challenge');
@@ -141,40 +206,44 @@ class GatewayProtocolService {
         throw Exception('challenge 数据无效');
       }
 
-      // 发送 connect 请求
       final requestId = _generateRequestId();
-      final connectRequest = GatewayMessage(
-        type: 'req',
-        id: requestId,
-        method: 'connect',
-        params: {
-          'minProtocol': 3,
-          'maxProtocol': 3,
-          'client': {
-            'id': clientId,
-            'version': clientVersion,
-            'platform': platform,
-            'mode': mode,
-          },
-          'role': 'operator',
-          'scopes': ['operator.read', 'operator.write'],
-          'auth': {'token': token},
-          'locale': locale,
-          'userAgent': '$clientId/$clientVersion',
+      final connectParams = {
+        'minProtocol': 3,
+        'maxProtocol': 3,
+        'client': {
+          'id': clientId,
+          'version': clientVersion,
+          'platform': platform,
+          'mode': mode,
         },
-      );
+        'role': 'operator',
+        'scopes': ['operator.read', 'operator.write'],
+        'auth': {'token': token},
+        'locale': locale,
+        'userAgent': '$clientId/$clientVersion',
+      };
 
-      final response = await _sendRequest(connectRequest);
+      final response = await _sendRequest('connect', connectParams, requestId);
       
-      if (response.ok == true && response.payload?['type'] == 'hello-ok') {
-        _deviceToken = response.payload?['auth']?['deviceToken'] as String?;
-        _updateState(GatewayConnectionState.connected);
-        return true;
-      } else {
-        _lastError = response.error?['message'] ?? '握手失败';
-        _updateState(GatewayConnectionState.error);
-        return false;
+      if (response['ok'] == true) {
+        final payload = response['payload'] as Map<String, dynamic>?;
+        if (payload?['type'] == 'hello-ok') {
+          _deviceToken = payload?['auth']?['deviceToken'] as String?;
+          
+          final policy = payload?['policy'] as Map<String, dynamic>?;
+          if (policy != null && policy['tickIntervalMs'] != null) {
+            _tickIntervalMs = policy['tickIntervalMs'] as int;
+          }
+          
+          _updateState(GatewayConnectionState.connected);
+          return true;
+        }
       }
+      
+      final errorMsg = response['error']?['message'] ?? '握手失败';
+      _lastError = errorMsg.toString();
+      _updateState(GatewayConnectionState.error);
+      return false;
 
     } catch (e) {
       _lastError = '握手失败: $e';
@@ -184,68 +253,101 @@ class GatewayProtocolService {
   }
 
   /// 发送聊天消息
-  Future<bool> chatSend(String message, String sessionKey) async {
-    final request = GatewayMessage(
-      type: 'req',
-      id: _generateRequestId(),
-      method: 'chat.send',
-      params: {
-        'message': message,
-        'sessionKey': sessionKey,
-      },
-    );
+  Future<ChatSendResponse?> chatSend(
+    String message, 
+    String sessionKey, {
+    String? thinking,
+    List<Map<String, dynamic>>? attachments,
+    int timeoutMs = 30000,
+  }) async {
+    final params = <String, dynamic>{
+      'sessionKey': sessionKey,
+      'message': message,
+      'idempotencyKey': _generateRequestId(),
+      'timeoutMs': timeoutMs,
+    };
+    
+    if (thinking != null && thinking.isNotEmpty) {
+      params['thinking'] = thinking;
+    }
+    
+    if (attachments != null && attachments.isNotEmpty) {
+      params['attachments'] = attachments;
+    }
 
     try {
-      final response = await _sendRequest(request, timeout: Duration(seconds: 30));
-      return response.ok == true;
+      final response = await _sendRequest('chat.send', params, null, timeoutSeconds: 35);
+      if (response['ok'] == true && response['payload'] != null) {
+        return ChatSendResponse.fromJson(response['payload'] as Map<String, dynamic>);
+      }
+      return null;
     } catch (e) {
-      return false;
+      print('chat.send 错误: $e');
+      return null;
     }
   }
 
   /// 获取聊天历史
   Future<List<Map<String, dynamic>>> chatHistory(String sessionKey) async {
-    final request = GatewayMessage(
-      type: 'req',
-      id: _generateRequestId(),
-      method: 'chat.history',
-      params: {
-        'sessionKey': sessionKey,
-        'limit': 100,
-      },
-    );
-
+    final params = {'sessionKey': sessionKey};
+    
     try {
-      final response = await _sendRequest(request);
-      if (response.ok == true && response.payload != null) {
-        final entries = response.payload!['entries'] as List<dynamic>?;
-        return entries?.cast<Map<String, dynamic>>() ?? [];
+      final response = await _sendRequest('chat.history', params, null, timeoutSeconds: 15);
+      if (response['ok'] == true && response['payload'] != null) {
+        final payload = response['payload'] as Map<String, dynamic>;
+        final messages = payload['messages'] as List<dynamic>?;
+        return messages?.cast<Map<String, dynamic>>() ?? [];
       }
       return [];
     } catch (e) {
+      print('chat.history 错误: $e');
       return [];
     }
   }
 
-  /// 发送请求并等待响应
-  Future<GatewayMessage> _sendRequest(GatewayMessage request, {Duration? timeout}) async {
+  /// 健康检查
+  Future<bool> health({int timeoutMs = 5000}) async {
+    try {
+      final response = await _sendRequest('health', null, null, timeoutSeconds: (timeoutMs / 1000).ceil());
+      return response['ok'] == true || response['payload']?['ok'] == true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// 发送请求
+  Future<Map<String, dynamic>> _sendRequest(
+    String method, 
+    Map<String, dynamic>? params, 
+    String? id, 
+    {int timeoutSeconds = 30}
+  ) async {
     if (_channel == null) {
       throw Exception('WebSocket 未连接');
     }
 
-    final completer = Completer<GatewayMessage>();
-    _pendingRequests[request.id!] = completer;
-
-    _channel!.sink.add(jsonEncode(request.toJson()));
-
-    if (timeout != null) {
-      return completer.future.timeout(timeout, onTimeout: () {
-        _pendingRequests.remove(request.id);
-        throw TimeoutException('请求超时');
-      });
+    final requestId = id ?? _generateRequestId();
+    final request = <String, dynamic>{
+      'type': 'req',
+      'id': requestId,
+      'method': method,
+    };
+    if (params != null) {
+      request['params'] = params;
     }
 
-    return completer.future;
+    final completer = Completer<Map<String, dynamic>>();
+    _pendingRequests[requestId] = completer;
+
+    _channel!.sink.add(jsonEncode(request));
+
+    return completer.future.timeout(
+      Duration(seconds: timeoutSeconds),
+      onTimeout: () {
+        _pendingRequests.remove(requestId);
+        throw TimeoutException('$method 请求超时');
+      },
+    );
   }
 
   /// 等待特定事件
@@ -285,11 +387,41 @@ class GatewayProtocolService {
       if (message.type == 'res' && message.id != null) {
         final completer = _pendingRequests.remove(message.id);
         if (completer != null && !completer.isCompleted) {
-          completer.complete(message);
+          completer.complete(json);
         }
       }
+      
+      // 处理事件
+      if (message.type == 'event') {
+        _handleEvent(message);
+      }
+      
     } catch (e) {
       print('消息解析错误: $e');
+    }
+  }
+  
+  /// 处理事件
+  void _handleEvent(GatewayMessage message) {
+    switch (message.event) {
+      case 'tick':
+        // 心跳 tick 事件，可以用于 UI 更新
+        break;
+      case 'health':
+        // 健康状态事件
+        break;
+      case 'chat':
+        if (message.payload != null) {
+          final chatEvent = ChatEventPayload.fromJson(message.payload!);
+          _chatEventController.add(chatEvent);
+        }
+        break;
+      case 'agent':
+        if (message.payload != null) {
+          final agentEvent = AgentEventPayload.fromJson(message.payload!);
+          _agentEventController.add(agentEvent);
+        }
+        break;
     }
   }
 
@@ -298,6 +430,7 @@ class GatewayProtocolService {
     await _channel?.sink.close();
     _channel = null;
     _deviceToken = null;
+    _pendingRequests.clear();
     _updateState(GatewayConnectionState.disconnected);
   }
 
@@ -314,6 +447,8 @@ class GatewayProtocolService {
     disconnect();
     _stateController.close();
     _messageController.close();
+    _chatEventController.close();
+    _agentEventController.close();
   }
 }
 

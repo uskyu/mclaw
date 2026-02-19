@@ -17,7 +17,6 @@ enum ConnectionStatus {
 }
 
 /// OpenClaw Gateway 主服务
-/// 整合 SSH 隧道和 WebSocket 协议
 class GatewayService extends ChangeNotifier {
   final SshTunnelService _sshService = SshTunnelService();
   final GatewayProtocolService _protocolService = GatewayProtocolService();
@@ -26,18 +25,27 @@ class GatewayService extends ChangeNotifier {
   ConnectionStatus _status = ConnectionStatus.disconnected;
   String? _errorMessage;
   StreamSubscription? _sshSubscription;
-  StreamSubscription? _messageSubscription;
+  StreamSubscription? _chatSubscription;
+  StreamSubscription? _agentSubscription;
+  
+  // 当前运行的 runId
+  String? _currentRunId;
 
   // Getters
   ConnectionStatus get status => _status;
   String? get errorMessage => _errorMessage;
   bool get isConnected => _status == ConnectionStatus.connected;
   Server? get currentServer => _currentServer;
+  String? get currentRunId => _currentRunId;
+  int get tickIntervalMs => _protocolService.tickIntervalMs;
+  
+  // 事件流
+  Stream<ChatEventPayload> get chatEventStream => _protocolService.chatEventStream;
+  Stream<AgentEventPayload> get agentEventStream => _protocolService.agentEventStream;
 
   /// 连接到服务器
   Future<bool> connect(Server server) async {
     try {
-      // 验证必需字段
       if (server.sshHost == null || server.sshHost!.isEmpty) {
         throw Exception('SSH 主机地址不能为空');
       }
@@ -52,7 +60,6 @@ class GatewayService extends ChangeNotifier {
       _errorMessage = null;
       _updateStatus(ConnectionStatus.sshConnecting);
 
-      // 1. 建立 SSH 隧道
       await _sshService.connect(
         host: server.sshHost!,
         port: server.sshPort ?? 22,
@@ -63,11 +70,9 @@ class GatewayService extends ChangeNotifier {
         remotePort: server.remotePort ?? 18789,
       );
 
-      // 等待 SSH 转发就绪
       await _waitForSshForwarding();
       _updateStatus(ConnectionStatus.sshConnected);
 
-      // 2. 连接 WebSocket（使用 SSH 隧道实际绑定的端口）
       _updateStatus(ConnectionStatus.wsConnecting);
       final actualLocalPort = _sshService.localPort ?? (server.localPort ?? 18789);
       final wsUrl = 'ws://127.0.0.1:$actualLocalPort';
@@ -75,7 +80,6 @@ class GatewayService extends ChangeNotifier {
       await _protocolService.connect(wsUrl);
       _updateStatus(ConnectionStatus.wsConnected);
 
-      // 3. 协议握手
       _updateStatus(ConnectionStatus.handshaking);
       final success = await _protocolService.handshake(
         clientId: server.clientId ?? 'webchat-ui',
@@ -88,7 +92,7 @@ class GatewayService extends ChangeNotifier {
 
       if (success) {
         _updateStatus(ConnectionStatus.connected);
-        _startListeningToMessages();
+        _startListeningToEvents();
         return true;
       } else {
         _errorMessage = _protocolService.lastError ?? '握手失败';
@@ -105,19 +109,30 @@ class GatewayService extends ChangeNotifier {
 
   /// 断开连接
   Future<void> disconnect() async {
-    await _messageSubscription?.cancel();
+    await _chatSubscription?.cancel();
+    await _agentSubscription?.cancel();
     await _sshSubscription?.cancel();
+    _chatSubscription = null;
+    _agentSubscription = null;
+    _sshSubscription = null;
+    
     await _protocolService.disconnect();
     await _sshService.disconnect();
     _currentServer = null;
     _errorMessage = null;
+    _currentRunId = null;
     _updateStatus(ConnectionStatus.disconnected);
   }
 
   /// 发送聊天消息
-  Future<bool> sendMessage(String message, {String sessionKey = 'main'}) async {
-    if (!isConnected) return false;
-    return await _protocolService.chatSend(message, sessionKey);
+  Future<ChatSendResponse?> sendMessage(String message, {String sessionKey = 'main'}) async {
+    if (!isConnected) return null;
+    
+    final response = await _protocolService.chatSend(message, sessionKey);
+    if (response != null) {
+      _currentRunId = response.runId;
+    }
+    return response;
   }
 
   /// 获取聊天历史
@@ -125,9 +140,12 @@ class GatewayService extends ChangeNotifier {
     if (!isConnected) return [];
     return await _protocolService.chatHistory(sessionKey);
   }
-
-  /// 监听消息流
-  Stream<GatewayMessage> get messageStream => _protocolService.messageStream;
+  
+  /// 健康检查
+  Future<bool> healthCheck({int timeoutMs = 5000}) async {
+    if (!isConnected) return false;
+    return await _protocolService.health(timeoutMs: timeoutMs);
+  }
 
   /// 等待 SSH 转发就绪
   Future<void> _waitForSshForwarding() async {
@@ -141,17 +159,17 @@ class GatewayService extends ChangeNotifier {
     }
   }
 
-  /// 开始监听 Gateway 消息
-  void _startListeningToMessages() {
-    _messageSubscription = _protocolService.messageStream.listen((message) {
-      // 处理消息事件
-      if (message.event == 'chat') {
-        // 触发聊天消息更新
-        notifyListeners();
-      } else if (message.event == 'agent') {
-        // 处理代理事件
-        notifyListeners();
+  /// 开始监听 Gateway 事件
+  void _startListeningToEvents() {
+    _chatSubscription = _protocolService.chatEventStream.listen((event) {
+      if (event.state == 'done' || event.state == 'error') {
+        _currentRunId = null;
       }
+      notifyListeners();
+    });
+    
+    _agentSubscription = _protocolService.agentEventStream.listen((event) {
+      notifyListeners();
     });
   }
 

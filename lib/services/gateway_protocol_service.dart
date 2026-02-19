@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
@@ -85,7 +86,16 @@ class GatewayProtocolService {
       _updateState(GatewayConnectionState.connecting);
       _lastError = null;
 
-      _channel = IOWebSocketChannel.connect(wsUrl);
+      // 使用自定义 Origin header 避免 CORS 问题
+      // SSH 隧道已经将请求转发到本地，所以 Origin 应该是 localhost
+      final socket = await WebSocket.connect(
+        wsUrl,
+        headers: {
+          'Origin': 'http://localhost:18789',
+        },
+      );
+      
+      _channel = IOWebSocketChannel(socket);
       
       // 监听消息
       _channel!.stream.listen(

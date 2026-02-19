@@ -243,6 +243,13 @@ class GatewayProtocolService {
       if (response['ok'] == true) {
         final payload = response['payload'] as Map<String, dynamic>?;
         if (payload?['type'] == 'hello-ok') {
+          final grantedScopes = _extractGrantedScopes(payload);
+          if (grantedScopes.isNotEmpty && !grantedScopes.contains('operator.write')) {
+            _lastError = '连接成功但缺少 operator.write 权限。请在 Gateway 开启 controlUi.allowInsecureAuth 或完成设备配对。';
+            _updateState(GatewayConnectionState.error);
+            return false;
+          }
+
           _deviceToken = payload?['auth']?['deviceToken'] as String?;
           
           final policy = payload?['policy'] as Map<String, dynamic>?;
@@ -315,7 +322,7 @@ class GatewayProtocolService {
     final params = {'sessionKey': sessionKey};
     
     try {
-      final response = await _sendRequest('chat.history', params, null, timeoutSeconds: 15);
+      final response = await _sendRequest('chat.history', params, null, timeoutSeconds: 35);
       if (response['ok'] == true && response['payload'] != null) {
         final payload = response['payload'] as Map<String, dynamic>;
         final messages = payload['messages'] as List<dynamic>?;
@@ -470,6 +477,25 @@ class GatewayProtocolService {
   void _updateState(GatewayConnectionState state) {
     _currentState = state;
     _stateController.add(state);
+  }
+
+  Set<String> _extractGrantedScopes(Map<String, dynamic>? payload) {
+    if (payload == null) return {};
+
+    final scopes = payload['scopes'];
+    if (scopes is List) {
+      return scopes.whereType<String>().toSet();
+    }
+
+    final auth = payload['auth'];
+    if (auth is Map<String, dynamic>) {
+      final authScopes = auth['scopes'];
+      if (authScopes is List) {
+        return authScopes.whereType<String>().toSet();
+      }
+    }
+
+    return {};
   }
 
   String _generateRequestId() {

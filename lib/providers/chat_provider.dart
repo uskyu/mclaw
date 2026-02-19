@@ -165,11 +165,26 @@ class ChatProvider with ChangeNotifier {
         _currentRunId = result.response!.runId;
         _pendingRuns.add(result.response!.runId);
       } else {
-        _messages.removeWhere((m) => m.id == loadingId);
-        final errorCode = result.errorCode ?? '';
-        final errorMsg = result.errorMessage ?? '发送失败';
-        _errorMessage = errorCode.isNotEmpty ? '[$errorCode] $errorMsg' : errorMsg;
-        notifyListeners();
+        // 只有在明确的权限错误时才移除 loading
+        // 超时可能意味着消息已发送，等待 agent 事件
+        if (result.errorCode != null) {
+          _messages.removeWhere((m) => m.id == loadingId);
+          final errorCode = result.errorCode ?? '';
+          final errorMsg = result.errorMessage ?? '发送失败';
+          _errorMessage = errorCode.isNotEmpty ? '[$errorCode] $errorMsg' : errorMsg;
+          notifyListeners();
+        } else {
+          // 超时等错误，保持 loading 状态，等待可能的 agent 事件
+          print('chat.send 可能超时，保持 loading 状态等待响应');
+          // 5秒后如果还没收到响应，再移除 loading
+          Future.delayed(const Duration(seconds: 10), () {
+            if (_messages.any((m) => m.id == loadingId && m.isLoading)) {
+              _messages.removeWhere((m) => m.id == loadingId);
+              _errorMessage = '响应超时，请重试';
+              notifyListeners();
+            }
+          });
+        }
       }
       
     } catch (e) {
@@ -181,15 +196,19 @@ class ChatProvider with ChangeNotifier {
 
   /// 处理 chat 事件
   void _handleChatEvent(ChatEventPayload event) {
+    print('chat 事件: state=${event.state}, runId=${event.runId}, sessionKey=${event.sessionKey}');
+    
     final isOurRun = event.runId != null && _pendingRuns.contains(event.runId!);
     
     // 检查 sessionKey 是否匹配
     if (event.sessionKey != null && !_matchesCurrentSessionKey(event.sessionKey!) && !isOurRun) {
+      print('sessionKey 不匹配，忽略: ${event.sessionKey}');
       return;
     }
     
     // 处理错误
     if (event.state == 'error') {
+      print('chat 错误: ${event.errorMessage}');
       _errorMessage = event.errorMessage ?? '聊天失败';
       _clearPendingRun(event.runId);
       _removeLoadingMessage();
@@ -199,6 +218,7 @@ class ChatProvider with ChangeNotifier {
     
     // 处理完成状态
     if (event.state == 'final' || event.state == 'aborted') {
+      print('chat 完成: ${event.state}');
       _clearPendingRun(event.runId);
       // 刷新历史获取最终消息
       _refreshHistoryAfterRun();
@@ -261,6 +281,8 @@ class ChatProvider with ChangeNotifier {
     final stream = event.stream;
     final data = event.data;
     
+    print('agent 事件: stream=$stream, runId=${event.runId}');
+    
     switch (stream) {
       case 'assistant':
         // 流式文本输出
@@ -273,6 +295,7 @@ class ChatProvider with ChangeNotifier {
         
       case 'done':
         // 流式完成
+        print('agent done, content length: ${_streamingContent.length}');
         if (_streamingContent.isNotEmpty) {
           _removeLoadingMessage();
           final aiMessage = Message(
@@ -330,6 +353,11 @@ class ChatProvider with ChangeNotifier {
   Future<void> _refreshHistoryAfterRun() async {
     _streamingContent = '';
     _removeLoadingMessage();
+    await _loadChatHistory();
+
+    // Gateway may emit `chat final` before history index is fully visible.
+    // Retry once after a short delay to avoid false timeout/error UX.
+    await Future.delayed(const Duration(milliseconds: 800));
     await _loadChatHistory();
   }
   

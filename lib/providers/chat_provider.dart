@@ -151,7 +151,7 @@ class ChatProvider with ChangeNotifier {
       timestamp: DateTime.now(),
       isLoading: true,
     );
-    _messages.add(aiMessage);
+    _upsertMessage(aiMessage);
     _streamingContent = '';
     notifyListeners();
 
@@ -219,15 +219,14 @@ class ChatProvider with ChangeNotifier {
     // 处理完成状态
     if (event.state == 'final' || event.state == 'aborted') {
       print('chat 完成: ${event.state}');
+      // 优先使用 agent 流式内容，chat payload 仅作为兜底，避免重复消息
+      if (_streamingContent.isEmpty && event.message != null) {
+        _processChatMessage(event.message!, event.runId);
+      }
       _clearPendingRun(event.runId);
       // 刷新历史获取最终消息
       _refreshHistoryAfterRun();
       return;
-    }
-    
-    // 处理消息
-    if (event.message != null) {
-      _processChatMessage(event.message!, event.runId);
     }
   }
   
@@ -248,7 +247,7 @@ class ChatProvider with ChangeNotifier {
           timestamp: DateTime.now(),
           isLoading: false,
         );
-        _messages.add(aiMessage);
+        _upsertMessage(aiMessage);
         _streamingContent = '';
         notifyListeners();
       }
@@ -288,7 +287,14 @@ class ChatProvider with ChangeNotifier {
         // 流式文本输出
         final text = data['text'];
         if (text != null) {
-          _streamingContent = text.toString();
+          final incoming = text.toString();
+          if (_streamingContent.isEmpty) {
+            _streamingContent = incoming;
+          } else if (incoming.startsWith(_streamingContent)) {
+            _streamingContent = incoming;
+          } else {
+            _streamingContent += incoming;
+          }
           _updateStreamingMessage();
         }
         break;
@@ -305,7 +311,7 @@ class ChatProvider with ChangeNotifier {
             timestamp: DateTime.now(),
             isLoading: false,
           );
-          _messages.add(aiMessage);
+          _upsertMessage(aiMessage);
           _streamingContent = '';
         }
         _clearPendingRun(event.runId);
@@ -339,6 +345,15 @@ class ChatProvider with ChangeNotifier {
   
   void _removeLoadingMessage() {
     _messages.removeWhere((m) => m.isLoading && m.type == MessageType.ai);
+  }
+
+  void _upsertMessage(Message message) {
+    final index = _messages.indexWhere((m) => m.id == message.id);
+    if (index >= 0) {
+      _messages[index] = message;
+    } else {
+      _messages.add(message);
+    }
   }
   
   void _clearPendingRun(String? runId) {

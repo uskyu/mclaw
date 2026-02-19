@@ -19,6 +19,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _scrollController = ScrollController();
+  int _lastMessageCount = 0;
 
   @override
   void dispose() {
@@ -34,6 +35,21 @@ class _ChatScreenState extends State<ChatScreen> {
         curve: Curves.easeOut,
       );
     }
+  }
+
+  void _scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  bool _isNearBottom() {
+    if (!_scrollController.hasClients) return true;
+    return (_scrollController.position.maxScrollExtent - _scrollController.offset) < 120;
   }
 
   @override
@@ -54,19 +70,50 @@ class _ChatScreenState extends State<ChatScreen> {
           Expanded(
             child: Consumer<ChatProvider>(
               builder: (context, provider, child) {
-                WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                final messageCount = provider.messages.length;
+                if (messageCount != _lastMessageCount) {
+                  final shouldAutoScroll = _lastMessageCount == 0 || _isNearBottom();
+                  _lastMessageCount = messageCount;
+                  if (shouldAutoScroll) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                  }
+                }
                 
                 if (provider.messages.isEmpty) {
                   return _buildEmptyState(l10n);
                 }
-                
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  itemCount: provider.messages.length,
-                  itemBuilder: (context, index) {
-                    return MessageBubble(message: provider.messages[index]);
-                  },
+
+                return Stack(
+                  children: [
+                    ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      itemCount: provider.messages.length,
+                      itemBuilder: (context, index) {
+                        return MessageBubble(message: provider.messages[index]);
+                      },
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildScrollButton(
+                              icon: Icons.keyboard_arrow_up,
+                              onTap: _scrollToTop,
+                            ),
+                            const SizedBox(height: 14),
+                            _buildScrollButton(
+                              icon: Icons.keyboard_arrow_down,
+                              onTap: _scrollToBottom,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -87,6 +134,30 @@ class _ChatScreenState extends State<ChatScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildScrollButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.72),
+      shape: const CircleBorder(),
+      elevation: 1,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 38,
+          height: 38,
+          child: Icon(
+            icon,
+            color: Colors.black87,
+            size: 22,
+          ),
+        ),
       ),
     );
   }

@@ -68,6 +68,17 @@ class ChatSendResponse {
   }
 }
 
+/// Chat 发送结果
+class ChatSendResult {
+  final ChatSendResponse? response;
+  final String? errorCode;
+  final String? errorMessage;
+
+  ChatSendResult({this.response, this.errorCode, this.errorMessage});
+  
+  bool get isSuccess => response != null && errorMessage == null;
+}
+
 /// Chat 事件负载
 class ChatEventPayload {
   final String? runId;
@@ -253,7 +264,7 @@ class GatewayProtocolService {
   }
 
   /// 发送聊天消息
-  Future<ChatSendResponse?> chatSend(
+  Future<ChatSendResult> chatSend(
     String message, 
     String sessionKey, {
     String? thinking,
@@ -277,13 +288,21 @@ class GatewayProtocolService {
 
     try {
       final response = await _sendRequest('chat.send', params, null, timeoutSeconds: 35);
+      
       if (response['ok'] == true && response['payload'] != null) {
-        return ChatSendResponse.fromJson(response['payload'] as Map<String, dynamic>);
+        return ChatSendResult(
+          response: ChatSendResponse.fromJson(response['payload'] as Map<String, dynamic>),
+        );
       }
-      return null;
+      
+      final error = response['error'] as Map<String, dynamic>?;
+      return ChatSendResult(
+        errorCode: error?['code'] as String?,
+        errorMessage: error?['message'] as String? ?? 'chat.send 失败',
+      );
     } catch (e) {
       print('chat.send 错误: $e');
-      return null;
+      return ChatSendResult(errorMessage: e.toString());
     }
   }
 

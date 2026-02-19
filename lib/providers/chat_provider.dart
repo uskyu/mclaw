@@ -156,18 +156,20 @@ class ChatProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _gatewayService.sendMessage(
+      final result = await _gatewayService.sendMessage(
         content.trim(),
         sessionKey: _currentSessionKey,
       );
       
-      if (response == null) {
-        _messages.removeWhere((m) => m.id == loadingId);
-        _errorMessage = '发送失败';
-        notifyListeners();
+      if (result.isSuccess && result.response != null) {
+        _currentRunId = result.response!.runId;
+        _pendingRuns.add(result.response!.runId);
       } else {
-        _currentRunId = response.runId;
-        _pendingRuns.add(response.runId);
+        _messages.removeWhere((m) => m.id == loadingId);
+        final errorCode = result.errorCode ?? '';
+        final errorMsg = result.errorMessage ?? '发送失败';
+        _errorMessage = errorCode.isNotEmpty ? '[$errorCode] $errorMsg' : errorMsg;
+        notifyListeners();
       }
       
     } catch (e) {

@@ -81,6 +81,9 @@ class SshConfigService {
       // 检查 CORS 配置 - 根据错误信息，检查 allowedOrigins
       final controlUi = gatewayConfig['controlUi'];
       if (controlUi != null) {
+        // 检查 allowInsecureAuth
+        result['allowInsecureAuth'] = controlUi['allowInsecureAuth'] ?? false;
+        
         // 检查 allowedOrigins（根据错误提示，这是实际存在的配置）
         final allowedOrigins = controlUi['allowedOrigins'];
         if (allowedOrigins != null && allowedOrigins is List && allowedOrigins.isNotEmpty) {
@@ -101,10 +104,18 @@ class SshConfigService {
           result['needsCorsFix'] = true;
           result['corsIssue'] = '缺少 allowedOrigins 配置，WebSocket 连接会被拒绝';
         }
+        
+        // 检查 scope 权限问题
+        if (controlUi['allowInsecureAuth'] != true) {
+          result['needsScopeFix'] = true;
+          result['scopeIssue'] = '需要设置 allowInsecureAuth: true 以获得完整权限';
+        }
       } else {
         // 缺少整个 controlUi 配置
         result['needsCorsFix'] = true;
+        result['needsScopeFix'] = true;
         result['corsIssue'] = '缺少 controlUi 配置节';
+        result['scopeIssue'] = '需要设置 allowInsecureAuth: true 以获得完整权限';
       }
 
       // 提取 Token
@@ -194,12 +205,10 @@ class SshConfigService {
       // 设置 allowedOrigins
       gatewayConfig['controlUi']['allowedOrigins'] = [
         '*',  // 允许所有来源（开发环境）
-        // 或者更严格的配置：
-        // 'http://localhost:*',
-        // 'ws://localhost:*',
-        // 'http://127.0.0.1:*',
-        // 'ws://127.0.0.1:*',
       ];
+      
+      // 设置 allowInsecureAuth - 允许无设备身份的连接使用完整权限
+      gatewayConfig['controlUi']['allowInsecureAuth'] = true;
 
       // 3. 备份原配置
       final backupPath = '$configPath.backup.${DateTime.now().millisecondsSinceEpoch}';
@@ -213,12 +222,14 @@ class SshConfigService {
       final verifyContent = await _readFile(client, configPath);
       final verifyConfig = jsonDecode(verifyContent);
       
-      if (verifyConfig['gateway']?['controlUi']?['allowedOrigins'] != null) {
+      final verifyControlUi = verifyConfig['gateway']?['controlUi'];
+      if (verifyControlUi?['allowedOrigins'] != null && verifyControlUi?['allowInsecureAuth'] == true) {
         return {
           'success': true,
-          'message': 'CORS 配置已修复',
+          'message': '配置已修复（CORS 和权限）',
           'backupPath': backupPath,
-          'allowedOrigins': verifyConfig['gateway']['controlUi']['allowedOrigins'],
+          'allowedOrigins': verifyControlUi['allowedOrigins'],
+          'allowInsecureAuth': verifyControlUi['allowInsecureAuth'],
         };
       } else {
         return {
@@ -279,6 +290,77 @@ class SshConfigService {
       return output.map((e) => utf8.decode(e)).join();
     } catch (e) {
       throw Exception('命令执行失败: $e');
+    }
+  }
+
+  /// 重启 Gateway 服务
+  static Future<Map<String, dynamic>> restartGateway({
+    required String host,
+    int port = 22,
+    required String username,
+    required String password,
+  }) async {
+    SSHClient? client;
+    
+    try {
+      final socket = await SSHSocket.connect(host, port);
+      
+      client = SSHClient(
+        socket,
+        username: username,
+        onPasswordRequest: () => password,
+      );
+
+      await client.authenticated;
+
+      // 尝试多种重启方式
+      String? restartOutput;
+      bool restarted = false;
+
+      // 方式1: systemctl restart openclaw
+      try {
+        restartOutput = await _executeCommand(client, 'systemctl restart openclaw 2>&1 || echo "SYSTEMCTL_FAILED"');
+        if (!restartOutput.contains('SYSTEMCTL_FAILED') && !restartOutput.contains('not found')) {
+          restarted = true;
+        }
+      } catch (e) {
+        // 忽略错误，尝试下一种方式
+      }
+
+      // 方式2: pkill && 重启
+      if (!restarted) {
+        try {
+          await _executeCommand(client, 'pkill -f "openclaw gateway" || true');
+          await Future.delayed(const Duration(seconds: 1));
+          await _executeCommand(client, 'nohup openclaw gateway > /dev/null 2>&1 &');
+          restarted = true;
+        } catch (e) {
+          // 忽略错误
+        }
+      }
+
+      if (restarted) {
+        // 等待服务重启
+        await Future.delayed(const Duration(seconds: 2));
+        return {
+          'success': true,
+          'message': 'Gateway 服务已重启',
+        };
+      } else {
+        return {
+          'success': false,
+          'error': '无法重启 Gateway 服务，请手动重启',
+        };
+      }
+      
+    } catch (e) {
+      print('重启 Gateway 失败: $e');
+      return {
+        'success': false,
+        'error': '重启失败: $e',
+      };
+    } finally {
+      client?.close();
     }
   }
 

@@ -125,14 +125,16 @@ class GatewayService extends ChangeNotifier {
   }
 
   /// 发送聊天消息
-  Future<ChatSendResponse?> sendMessage(String message, {String sessionKey = 'main'}) async {
-    if (!isConnected) return null;
-    
-    final response = await _protocolService.chatSend(message, sessionKey);
-    if (response != null) {
-      _currentRunId = response.runId;
+  Future<ChatSendResult> sendMessage(String message, {String sessionKey = 'main'}) async {
+    if (!isConnected) {
+      return ChatSendResult(errorMessage: '未连接到服务器');
     }
-    return response;
+    
+    final result = await _protocolService.chatSend(message, sessionKey);
+    if (result.isSuccess && result.response != null) {
+      _currentRunId = result.response!.runId;
+    }
+    return result;
   }
 
   /// 获取聊天历史

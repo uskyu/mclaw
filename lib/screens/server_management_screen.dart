@@ -414,24 +414,54 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
       if (mounted) Navigator.pop(context);
 
       if (fixResult['success'] == true) {
+        // 重启 Gateway 服务
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✓ ${fixResult['message']}，正在重新连接...'),
+            const SnackBar(
+              content: Text('✓ 配置已修复，正在重启 Gateway...'),
               backgroundColor: AppTheme.appleGreen,
-              duration: const Duration(seconds: 3),
+              duration: Duration(seconds: 2),
             ),
           );
         }
-        
-        // 4. 重新尝试连接
-        await Future.delayed(const Duration(seconds: 2));
-        await _activateServer(server);
+
+        final restartResult = await SshConfigService.restartGateway(
+          host: server.sshHost!,
+          port: server.sshPort ?? 22,
+          username: server.sshUsername!,
+          password: server.sshPassword ?? '',
+        );
+
+        if (restartResult['success'] == true) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✓ ${restartResult['message']}，正在连接...'),
+                backgroundColor: AppTheme.appleGreen,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+          
+          // 等待服务完全启动
+          await Future.delayed(const Duration(seconds: 2));
+          await _activateServer(server);
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('⚠️ ${restartResult['error']}'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✗ CORS 修复失败: ${fixResult['error']}'),
+              content: Text('✗ 配置修复失败: ${fixResult['error']}'),
               backgroundColor: AppTheme.appleRed,
             ),
           );
@@ -924,7 +954,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                               configPath: result['configPath'],
                                             );
 
-                                            // 修复 CORS
+                                            // 修复配置
                                             final fixResult = await SshConfigService.fixCorsConfig(
                                               host: sshHostController.text.trim(),
                                               port: int.tryParse(sshPortController.text) ?? 22,
@@ -934,21 +964,34 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                               currentConfig: fullConfig,
                                             );
 
-                                            setDialogState(() => isDetecting = false);
-
                                             if (fixResult['success'] != true) {
                                               setDialogState(() {
-                                                detectionError = 'CORS 修复失败: ${fixResult['error']}';
+                                                isDetecting = false;
+                                                detectionError = '配置修复失败: ${fixResult['error']}';
                                               });
                                               return;
                                             }
 
-                                            if (mounted) {
+                                            // 重启 Gateway
+                                            final restartResult = await SshConfigService.restartGateway(
+                                              host: sshHostController.text.trim(),
+                                              port: int.tryParse(sshPortController.text) ?? 22,
+                                              username: sshUsernameController.text.trim(),
+                                              password: sshPasswordController.text,
+                                            );
+
+                                            setDialogState(() => isDetecting = false);
+
+                                            if (restartResult['success'] != true) {
+                                              setDialogState(() {
+                                                detectionError = '${restartResult['error']}（配置已修复）';
+                                              });
+                                            } else if (mounted) {
                                               ScaffoldMessenger.of(context).showSnackBar(
                                                 SnackBar(
-                                                  content: Text('✓ ${fixResult['message']}'),
+                                                  content: Text('✓ 配置已修复，Gateway 已重启'),
                                                   backgroundColor: AppTheme.appleGreen,
-                                                  duration: const Duration(seconds: 3),
+                                                  duration: const Duration(seconds: 2),
                                                 ),
                                               );
                                             }

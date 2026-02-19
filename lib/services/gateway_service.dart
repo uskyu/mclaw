@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/server.dart';
+import '../services/secure_storage_service.dart';
 import 'ssh_tunnel_service.dart';
 import 'gateway_protocol_service.dart';
 
@@ -56,25 +57,26 @@ class GatewayService extends ChangeNotifier {
         throw Exception('Gateway Token 不能为空');
       }
 
-      _currentServer = server;
+      final preparedServer = await _ensureDeviceIdentity(server);
+      _currentServer = preparedServer;
       _errorMessage = null;
       _updateStatus(ConnectionStatus.sshConnecting);
 
       await _sshService.connect(
-        host: server.sshHost!,
-        port: server.sshPort ?? 22,
-        username: server.sshUsername!,
-        password: server.sshPassword ?? '',
-        localPort: server.localPort ?? 18789,
-        remoteHost: server.remoteHost ?? '127.0.0.1',
-        remotePort: server.remotePort ?? 18789,
+        host: preparedServer.sshHost!,
+        port: preparedServer.sshPort ?? 22,
+        username: preparedServer.sshUsername!,
+        password: preparedServer.sshPassword ?? '',
+        localPort: preparedServer.localPort ?? 18789,
+        remoteHost: preparedServer.remoteHost ?? '127.0.0.1',
+        remotePort: preparedServer.remotePort ?? 18789,
       );
 
       await _waitForSshForwarding();
       _updateStatus(ConnectionStatus.sshConnected);
 
       _updateStatus(ConnectionStatus.wsConnecting);
-      final actualLocalPort = _sshService.localPort ?? (server.localPort ?? 18789);
+      final actualLocalPort = _sshService.localPort ?? (preparedServer.localPort ?? 18789);
       final wsUrl = 'ws://127.0.0.1:$actualLocalPort';
       print('连接 WebSocket: $wsUrl');
       await _protocolService.connect(wsUrl);
@@ -82,15 +84,17 @@ class GatewayService extends ChangeNotifier {
 
       _updateStatus(ConnectionStatus.handshaking);
       final success = await _protocolService.handshake(
-        clientId: server.clientId ?? 'webchat-ui',
+        clientId: preparedServer.clientId ?? 'openclaw-control-ui',
         clientVersion: '1.0.0',
-        platform: server.platform ?? 'android',
-        mode: server.clientMode ?? 'ui',
-        token: server.gatewayToken!,
-        locale: server.locale ?? 'zh-CN',
+        platform: preparedServer.platform ?? 'android',
+        mode: preparedServer.clientMode ?? 'ui',
+        token: preparedServer.gatewayToken!,
+        locale: preparedServer.locale ?? 'zh-CN',
+        deviceToken: preparedServer.deviceToken,
       );
 
       if (success) {
+        await _persistDeviceTokenIfNeeded(preparedServer);
         _updateStatus(ConnectionStatus.connected);
         _startListeningToEvents();
         return true;
@@ -108,6 +112,34 @@ class GatewayService extends ChangeNotifier {
   }
 
   /// 断开连接
+  Future<Server> _ensureDeviceIdentity(Server server) async {
+    final deviceId = (server.deviceId != null && server.deviceId!.isNotEmpty)
+        ? server.deviceId
+        : 'clawchat-${server.id}';
+    final deviceName = (server.deviceName != null && server.deviceName!.isNotEmpty)
+        ? server.deviceName
+        : 'ClawChat ${server.name}';
+
+    if (deviceId == server.deviceId && deviceName == server.deviceName) {
+      return server;
+    }
+
+    final updated = server.copyWith(deviceId: deviceId, deviceName: deviceName);
+    await SecureStorageService.upsertServer(updated);
+    return updated;
+  }
+
+  Future<void> _persistDeviceTokenIfNeeded(Server server) async {
+    final newDeviceToken = _protocolService.deviceToken;
+    if (newDeviceToken == null || newDeviceToken.isEmpty) return;
+    if (newDeviceToken == server.deviceToken) return;
+
+    final updated = server.copyWith(deviceToken: newDeviceToken);
+    _currentServer = updated;
+    await SecureStorageService.upsertServer(updated);
+  }
+
+  /// Disconnect
   Future<void> disconnect() async {
     await _chatSubscription?.cancel();
     await _agentSubscription?.cancel();

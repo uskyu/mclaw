@@ -29,9 +29,12 @@ class Server {
   
   // Gateway 认证
   final String? gatewayToken;
+  final String? deviceId;
+  final String? deviceName;
+  final String? deviceToken;
   
   // 客户端配置
-  final String? clientId;    // 如 'webchat-ui', 'cli'
+  final String? clientId;    // 如 'openclaw-control-ui', 'cli'
   final String? clientMode;  // 如 'ui', 'cli'
   final String? platform;    // 如 'android', 'ios'
   final String? locale;      // 如 'zh-CN', 'en-US'
@@ -55,8 +58,11 @@ class Server {
     this.localPort = 18789,
     this.remoteHost = '127.0.0.1',
     this.gatewayToken,
+    this.deviceId,
+    this.deviceName,
+    this.deviceToken,
     // Client config
-    this.clientId = 'webchat-ui',
+    this.clientId = 'openclaw-control-ui',
     this.clientMode = 'ui',
     this.platform = 'android',
     this.locale = 'zh-CN',
@@ -76,6 +82,9 @@ class Server {
     String? gatewayToken,
     String? clientId,
     String? clientMode,
+    String? deviceId,
+    String? deviceName,
+    String? deviceToken,
   }) {
     return Server(
       id: id,
@@ -89,8 +98,11 @@ class Server {
       remotePort: remotePort ?? 18789,
       localPort: localPort ?? 18789,
       gatewayToken: gatewayToken,
-      clientId: clientId ?? 'webchat-ui',
+      clientId: clientId ?? 'openclaw-control-ui',
       clientMode: clientMode ?? 'ui',
+      deviceId: deviceId,
+      deviceName: deviceName,
+      deviceToken: deviceToken,
     );
   }
 
@@ -134,6 +146,9 @@ class Server {
     String? clientMode,
     String? platform,
     String? locale,
+    String? deviceId,
+    String? deviceName,
+    String? deviceToken,
   }) {
     return Server(
       id: id ?? this.id,
@@ -155,6 +170,9 @@ class Server {
       clientMode: clientMode ?? this.clientMode,
       platform: platform ?? this.platform,
       locale: locale ?? this.locale,
+      deviceId: deviceId ?? this.deviceId,
+      deviceName: deviceName ?? this.deviceName,
+      deviceToken: deviceToken ?? this.deviceToken,
     );
   }
 
@@ -180,6 +198,9 @@ class Server {
       'clientMode': clientMode,
       'platform': platform,
       'locale': locale,
+      'deviceId': deviceId,
+      'deviceName': deviceName,
+      'deviceToken': deviceToken,
     };
   }
 
@@ -204,10 +225,13 @@ class Server {
       localPort: json['localPort'] as int? ?? 18789,
       remoteHost: json['remoteHost'] as String? ?? '127.0.0.1',
       gatewayToken: json['gatewayToken'] as String?,
-      clientId: json['clientId'] as String? ?? 'webchat-ui',
+      clientId: 'openclaw-control-ui',  // 强制使用正确的 clientId
       clientMode: json['clientMode'] as String? ?? 'ui',
       platform: json['platform'] as String? ?? 'android',
       locale: json['locale'] as String? ?? 'zh-CN',
+      deviceId: json['deviceId'] as String?,
+      deviceName: json['deviceName'] as String?,
+      deviceToken: json['deviceToken'] as String?,
     );
   }
 }

@@ -41,6 +41,18 @@ class SecureStorageService {
     }
   }
 
+  /// 鏇存柊鍗曚釜鏈嶅姟鍣ㄩ厤缃?
+  static Future<void> upsertServer(Server server) async {
+    final servers = await loadServers();
+    final index = servers.indexWhere((s) => s.id == server.id);
+    if (index >= 0) {
+      servers[index] = server;
+    } else {
+      servers.add(server);
+    }
+    await saveServers(servers);
+  }
+
   /// 保存当前活跃的服务器 ID
   static Future<void> saveActiveServerId(String serverId) async {
     await _storage.write(key: _activeServerIdKey, value: serverId);

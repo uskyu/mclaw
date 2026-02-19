@@ -1233,6 +1233,9 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                               remotePort: int.tryParse(remotePortController.text) ?? 18789,
                               localPort: int.tryParse(localPortController.text) ?? 18789,
                               gatewayToken: gatewayTokenController.text,
+                              deviceId: server?.deviceId,
+                              deviceName: server?.deviceName,
+                              deviceToken: server?.deviceToken,
                               isActive: true, // 新服务器默认设为活跃
                             );
 

@@ -200,6 +200,7 @@ class GatewayProtocolService {
     required String platform,
     required String mode,
     required String token,
+    String? deviceToken,
     String locale = 'zh-CN',
   }) async {
     try {
@@ -229,10 +230,13 @@ class GatewayProtocolService {
         },
         'role': 'operator',
         'scopes': ['operator.read', 'operator.write'],
-        'auth': {'token': token},
-        'locale': locale,
-        'userAgent': '$clientId/$clientVersion',
+        'auth': {
+          'token': token,
+          if (deviceToken != null && deviceToken.isNotEmpty) 'deviceToken': deviceToken,
+        },
       };
+
+      print('发送 connect 参数: ${jsonEncode(connectParams)}');
 
       final response = await _sendRequest('connect', connectParams, requestId);
       
@@ -358,12 +362,14 @@ class GatewayProtocolService {
     final completer = Completer<Map<String, dynamic>>();
     _pendingRequests[requestId] = completer;
 
+    print('发送请求: $method, id: $requestId');
     _channel!.sink.add(jsonEncode(request));
 
     return completer.future.timeout(
       Duration(seconds: timeoutSeconds),
       onTimeout: () {
         _pendingRequests.remove(requestId);
+        print('请求超时: $method, id: $requestId');
         throw TimeoutException('$method 请求超时');
       },
     );
@@ -398,6 +404,8 @@ class GatewayProtocolService {
   void _handleMessage(dynamic data) {
     try {
       final json = jsonDecode(data as String) as Map<String, dynamic>;
+      print('收到消息: ${json['type']} ${json['method'] ?? json['event'] ?? json['id'] ?? ''}');
+      
       final message = GatewayMessage.fromJson(json);
       
       _messageController.add(message);
@@ -406,7 +414,13 @@ class GatewayProtocolService {
       if (message.type == 'res' && message.id != null) {
         final completer = _pendingRequests.remove(message.id);
         if (completer != null && !completer.isCompleted) {
+          print('匹配到请求: ${message.id}, ok: ${message.ok}');
+          if (message.ok != true) {
+            print('错误响应: ${jsonEncode(json['error'])}');
+          }
           completer.complete(json);
+        } else {
+          print('未找到请求: ${message.id}, pending: ${_pendingRequests.keys}');
         }
       }
       

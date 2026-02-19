@@ -22,14 +22,15 @@ class ChatProvider with ChangeNotifier {
   
   double _contextUsage = 0.0;
   int _totalTokens = 0;
-  int _maxTokens = 8000;
+  final int _maxTokens = 8000;
   
   final List<Conversation> _conversations = [];
   String _currentConversationId = 'main';
   
-  // 当前正在流式输出的消息内容
+  // 流式输出状态
   String _streamingContent = '';
   String? _currentRunId;
+  final Set<String> _pendingRuns = {};
 
   ChatProvider({required GatewayService gatewayService}) 
       : _gatewayService = gatewayService {
@@ -49,8 +50,8 @@ class ChatProvider with ChangeNotifier {
   int get totalTokens => _totalTokens;
   int get maxTokens => _maxTokens;
   ConnectionStatus get connectionStatus => _gatewayService.status;
+  bool get isStreaming => _streamingContent.isNotEmpty;
 
-  /// 初始化
   Future<void> _init() async {
     _chatSubscription = _gatewayService.chatEventStream.listen(_handleChatEvent);
     _agentSubscription = _gatewayService.agentEventStream.listen(_handleAgentEvent);
@@ -58,7 +59,6 @@ class ChatProvider with ChangeNotifier {
     await _autoConnect();
   }
 
-  /// 自动连接
   Future<void> _autoConnect() async {
     final servers = await SecureStorageService.loadServers();
     final activeServerId = await SecureStorageService.loadActiveServerId();
@@ -84,7 +84,6 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-  /// 连接到服务器
   Future<bool> connectToServer(Server server) async {
     if (server.type != ServerType.openclaw) {
       _errorMessage = '暂不支持此类型服务器';
@@ -117,14 +116,14 @@ class ChatProvider with ChangeNotifier {
     }
   }
 
-  /// 断开连接
   Future<void> disconnect() async {
     await _gatewayService.disconnect();
     _messages.clear();
+    _pendingRuns.clear();
+    _currentRunId = null;
     notifyListeners();
   }
 
-  /// 发送消息
   Future<void> sendMessage(String content) async {
     if (content.trim().isEmpty) return;
     
@@ -143,8 +142,10 @@ class ChatProvider with ChangeNotifier {
     _messages.add(userMessage);
     notifyListeners();
 
+    // 添加加载中消息
+    final loadingId = 'loading_${DateTime.now().millisecondsSinceEpoch}';
     final aiMessage = Message(
-      id: 'loading_${DateTime.now().millisecondsSinceEpoch}',
+      id: loadingId,
       content: '',
       type: MessageType.ai,
       timestamp: DateTime.now(),
@@ -161,118 +162,190 @@ class ChatProvider with ChangeNotifier {
       );
       
       if (response == null) {
-        _messages.removeWhere((m) => m.id == aiMessage.id);
+        _messages.removeWhere((m) => m.id == loadingId);
         _errorMessage = '发送失败';
         notifyListeners();
       } else {
         _currentRunId = response.runId;
+        _pendingRuns.add(response.runId);
       }
       
     } catch (e) {
-      _messages.removeWhere((m) => m.id == aiMessage.id);
+      _messages.removeWhere((m) => m.id == loadingId);
       _errorMessage = '发送错误: $e';
       notifyListeners();
     }
   }
 
-  /// 处理聊天事件
+  /// 处理 chat 事件
   void _handleChatEvent(ChatEventPayload event) {
-    if (event.errorMessage != null) {
-      _messages.removeWhere((m) => m.isLoading && m.type == MessageType.ai);
-      _errorMessage = event.errorMessage;
+    final isOurRun = event.runId != null && _pendingRuns.contains(event.runId!);
+    
+    // 检查 sessionKey 是否匹配
+    if (event.sessionKey != null && !_matchesCurrentSessionKey(event.sessionKey!) && !isOurRun) {
+      return;
+    }
+    
+    // 处理错误
+    if (event.state == 'error') {
+      _errorMessage = event.errorMessage ?? '聊天失败';
+      _clearPendingRun(event.runId);
+      _removeLoadingMessage();
       notifyListeners();
       return;
     }
     
-    if (event.message != null) {
-      final message = event.message!;
-      final content = message['content'];
-      String text = '';
-      
-      if (content is String) {
-        text = content;
-      } else if (content is List) {
-        for (final item in content) {
-          if (item is Map && item['text'] != null) {
-            text += item['text'] as String;
-          }
-        }
-      }
-      
-      if (text.isNotEmpty) {
-        final role = message['role'] as String? ?? 'assistant';
-        
-        if (role == 'assistant') {
-          _messages.removeWhere((m) => m.isLoading && m.type == MessageType.ai);
-          
-          final aiMessage = Message(
-            id: event.runId ?? DateTime.now().millisecondsSinceEpoch.toString(),
-            content: text,
-            type: MessageType.ai,
-            timestamp: DateTime.now(),
-            isLoading: false,
-          );
-          _messages.add(aiMessage);
-          notifyListeners();
-        }
-      }
+    // 处理完成状态
+    if (event.state == 'final' || event.state == 'aborted') {
+      _clearPendingRun(event.runId);
+      // 刷新历史获取最终消息
+      _refreshHistoryAfterRun();
+      return;
     }
     
-    if (event.state == 'done' || event.state == 'error') {
-      _currentRunId = null;
-      _messages.removeWhere((m) => m.isLoading && m.type == MessageType.ai);
-      notifyListeners();
+    // 处理消息
+    if (event.message != null) {
+      _processChatMessage(event.message!, event.runId);
     }
   }
-
-  /// 处理代理事件
-  void _handleAgentEvent(AgentEventPayload event) {
-    final stream = event.stream;
-    final data = event.data;
+  
+  void _processChatMessage(Map<String, dynamic> message, String? runId) {
+    final role = message['role'] as String? ?? '';
     
-    if (stream == 'content' || stream == 'text') {
-      final text = data['text'] as String?;
-      if (text != null && text.isNotEmpty) {
-        _streamingContent += text;
-        
-        final loadingMessages = _messages.where((m) => m.isLoading && m.type == MessageType.ai).toList();
-        if (loadingMessages.isNotEmpty) {
-          final idx = _messages.indexOf(loadingMessages.last);
-          _messages[idx] = Message(
-            id: loadingMessages.last.id,
-            content: _streamingContent,
-            type: MessageType.ai,
-            timestamp: loadingMessages.last.timestamp,
-            isLoading: true,
-          );
-          notifyListeners();
-        }
-      }
-    } else if (stream == 'done') {
-      _messages.removeWhere((m) => m.isLoading && m.type == MessageType.ai);
+    if (role == 'assistant') {
+      final content = message['content'];
+      String text = _extractText(content);
       
-      if (_streamingContent.isNotEmpty) {
+      if (text.isNotEmpty) {
+        _removeLoadingMessage();
+        
         final aiMessage = Message(
-          id: event.runId,
-          content: _streamingContent,
+          id: runId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+          content: text,
           type: MessageType.ai,
           timestamp: DateTime.now(),
           isLoading: false,
         );
         _messages.add(aiMessage);
+        _streamingContent = '';
+        notifyListeners();
       }
-      _streamingContent = '';
-      _currentRunId = null;
-      notifyListeners();
-    } else if (stream == 'usage') {
-      final input = (data['input'] as num?)?.toInt() ?? 0;
-      final output = (data['output'] as num?)?.toInt() ?? 0;
-      _totalTokens = input + output;
-      notifyListeners();
     }
   }
+  
+  String _extractText(dynamic content) {
+    if (content == null) return '';
+    
+    if (content is String) {
+      return content;
+    } else if (content is List) {
+      final buffer = StringBuffer();
+      for (final item in content) {
+        if (item is Map) {
+          final text = item['text'];
+          if (text is String) {
+            buffer.write(text);
+          }
+        }
+      }
+      return buffer.toString();
+    }
+    
+    return '';
+  }
 
-  /// 加载聊天历史
+  /// 处理 agent 事件 - 流式输出
+  void _handleAgentEvent(AgentEventPayload event) {
+    final stream = event.stream;
+    final data = event.data;
+    
+    switch (stream) {
+      case 'assistant':
+        // 流式文本输出
+        final text = data['text'];
+        if (text != null) {
+          _streamingContent = text.toString();
+          _updateStreamingMessage();
+        }
+        break;
+        
+      case 'done':
+        // 流式完成
+        if (_streamingContent.isNotEmpty) {
+          _removeLoadingMessage();
+          final aiMessage = Message(
+            id: event.runId,
+            content: _streamingContent,
+            type: MessageType.ai,
+            timestamp: DateTime.now(),
+            isLoading: false,
+          );
+          _messages.add(aiMessage);
+          _streamingContent = '';
+        }
+        _clearPendingRun(event.runId);
+        break;
+        
+      case 'usage':
+        // Token 使用统计
+        final input = (data['input'] as num?)?.toInt() ?? 0;
+        final output = (data['output'] as num?)?.toInt() ?? 0;
+        _totalTokens = input + output;
+        break;
+    }
+  }
+  
+  void _updateStreamingMessage() {
+    final loadingMessages = _messages.where((m) => m.isLoading && m.type == MessageType.ai).toList();
+    if (loadingMessages.isNotEmpty) {
+      final idx = _messages.indexOf(loadingMessages.last);
+      if (idx >= 0) {
+        _messages[idx] = Message(
+          id: loadingMessages.last.id,
+          content: _streamingContent,
+          type: MessageType.ai,
+          timestamp: loadingMessages.last.timestamp,
+          isLoading: true,
+        );
+        notifyListeners();
+      }
+    }
+  }
+  
+  void _removeLoadingMessage() {
+    _messages.removeWhere((m) => m.isLoading && m.type == MessageType.ai);
+  }
+  
+  void _clearPendingRun(String? runId) {
+    if (runId != null) {
+      _pendingRuns.remove(runId);
+    }
+    if (runId == _currentRunId) {
+      _currentRunId = null;
+    }
+  }
+  
+  Future<void> _refreshHistoryAfterRun() async {
+    _streamingContent = '';
+    _removeLoadingMessage();
+    await _loadChatHistory();
+  }
+  
+  bool _matchesCurrentSessionKey(String incoming) {
+    final incomingLower = incoming.toLowerCase().trim();
+    final currentLower = _currentSessionKey.toLowerCase().trim();
+    
+    if (incomingLower == currentLower) return true;
+    
+    // 处理别名: "main" <-> "agent:main:main"
+    if ((incomingLower == 'agent:main:main' && currentLower == 'main') ||
+        (incomingLower == 'main' && currentLower == 'agent:main:main')) {
+      return true;
+    }
+    
+    return false;
+  }
+
   Future<void> _loadChatHistory() async {
     try {
       final history = await _gatewayService.getChatHistory(
@@ -286,24 +359,15 @@ class ChatProvider with ChangeNotifier {
         final content = entry['content'];
         final timestamp = (entry['timestamp'] as num?)?.toInt();
         
-        String text = '';
-        if (content is String) {
-          text = content;
-        } else if (content is List) {
-          for (final item in content) {
-            if (item is Map && item['text'] != null) {
-              text += item['text'] as String;
-            }
-          }
-        }
+        final text = _extractText(content);
         
-        if (text.isNotEmpty) {
+        if (text.isNotEmpty && role != null) {
           _messages.add(Message(
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             content: text,
             type: role == 'user' ? MessageType.user : MessageType.ai,
             timestamp: timestamp != null 
-                ? DateTime.fromMillisecondsSinceEpoch(timestamp.toInt())
+                ? DateTime.fromMillisecondsSinceEpoch(timestamp)
                 : DateTime.now(),
             isLoading: false,
           ));

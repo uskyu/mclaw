@@ -352,25 +352,77 @@ class ChatProvider with ChangeNotifier {
     return true;
   }
 
-  String _extractText(dynamic content) {
+  String _extractText(dynamic content, {String? role}) {
     if (content == null) return '';
 
     if (content is String) {
-      return content;
+      return _normalizeHistoryAttachmentText(content, role: role);
     } else if (content is List) {
       final buffer = StringBuffer();
+      var hasImagePart = false;
       for (final item in content) {
         if (item is Map) {
           final text = item['text'];
+          final type = item['type']?.toString() ?? '';
+          if (type.contains('image') || item['image'] != null) {
+            hasImagePart = true;
+          }
           if (text is String) {
             buffer.write(text);
           }
         }
       }
-      return buffer.toString();
+      final value = _normalizeHistoryAttachmentText(
+        buffer.toString(),
+        role: role,
+      );
+      if (value.trim().isNotEmpty) {
+        return value;
+      }
+      if ((role == 'user' || role == null) && hasImagePart) {
+        return '📎 已发送图片';
+      }
+      return '';
     }
 
     return '';
+  }
+
+  String _normalizeHistoryAttachmentText(String text, {String? role}) {
+    final value = text.trim();
+    if (value.isEmpty) {
+      return '';
+    }
+    if (role != 'user') {
+      return value;
+    }
+
+    if (!value.contains('Conversation info (untrusted metadata):')) {
+      return value;
+    }
+
+    final lines = value
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    final userParts = <String>[];
+    final stampedLine = RegExp(r'^\[[^\]]+\]\s*(.+)$');
+    for (final line in lines) {
+      final m = stampedLine.firstMatch(line);
+      if (m == null) {
+        continue;
+      }
+      final body = m.group(1)?.trim() ?? '';
+      if (body.isNotEmpty) {
+        userParts.add(body);
+      }
+    }
+
+    if (userParts.isNotEmpty) {
+      return '📎 已发送图片\n${userParts.join('\n')}';
+    }
+    return '📎 已发送图片';
   }
 
   /// 处理 agent 事件 - 流式输出
@@ -843,7 +895,7 @@ class ChatProvider with ChangeNotifier {
         final content = entry['content'];
         final timestamp = (entry['timestamp'] as num?)?.toInt();
 
-        final text = _extractText(content);
+        final text = _extractText(content, role: role);
 
         if (text.isNotEmpty && role != null) {
           if (role == 'user' && firstUserText == null) {

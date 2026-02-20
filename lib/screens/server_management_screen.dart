@@ -731,7 +731,11 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            warning == null ? '✓ 部署成功，已切换为直连模式' : '✓ 部署成功（$warning）',
+            result['reused'] == true
+                ? '✓ 已检测到现有部署，已切换直连模式'
+                : warning == null
+                ? '✓ 部署成功，已切换为直连模式'
+                : '✓ 部署成功（$warning）',
           ),
           backgroundColor: warning == null
               ? AppTheme.appleGreen
@@ -1443,6 +1447,16 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                           result['port']?.toString() ?? '18789';
                                       gatewayTokenController.text =
                                           result['token']?.toString() ?? '';
+                                      if (selectedConnectionMode ==
+                                          GatewayConnectionMode.direct) {
+                                        final detectedUrl =
+                                            result['directGatewayUrl']
+                                                ?.toString();
+                                        if ((detectedUrl ?? '').isNotEmpty) {
+                                          gatewayUrlController.text =
+                                              detectedUrl!;
+                                        }
+                                      }
 
                                       if (nameController.text.isEmpty) {
                                         nameController.text =
@@ -1638,7 +1652,9 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                         ).showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                              result['warning'] == null
+                                              result['reused'] == true
+                                                  ? '✓ 已检测到现有部署，已自动填充 URL'
+                                                  : result['warning'] == null
                                                   ? '✓ 直连部署完成，已自动填充 URL'
                                                   : '✓ 部署完成：${result['warning']}',
                                             ),

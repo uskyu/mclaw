@@ -125,6 +125,15 @@ class SshConfigService {
         result['authMode'] = authConfig['mode'] ?? 'token';
       }
 
+      final detectedToken = result['token']?.toString().trim() ?? '';
+      if (detectedToken.isNotEmpty) {
+        result['directGatewayUrl'] = 'ws://$host:${result['port'] ?? 18789}';
+      }
+      result['isDirectReady'] =
+          detectedToken.isNotEmpty &&
+          result['bind'] == 'loopback' &&
+          result['allowInsecureAuth'] == true;
+
       return result;
     } catch (e) {
       print('SSH 配置检测失败: $e');
@@ -280,40 +289,84 @@ class SshConfigService {
           (gateway['controlUi'] as Map<String, dynamic>?) ??
           <String, dynamic>{};
 
-      final token = (auth['token'] as String?)?.trim().isNotEmpty == true
-          ? (auth['token'] as String)
-          : _generateGatewayToken();
-
-      auth['mode'] = 'token';
-      auth['token'] = token;
-      gateway['auth'] = auth;
-      gateway['bind'] = 'loopback';
-      gateway['port'] = gatewayPort;
-
-      controlUi['allowedOrigins'] = ['*'];
-      controlUi['allowInsecureAuth'] = true;
-      gateway['controlUi'] = controlUi;
-      config['gateway'] = gateway;
-
-      final backupPath =
-          '$configPath.backup.${DateTime.now().millisecondsSinceEpoch}';
-      await _executeCommand(
-        client,
-        'cp $configPath $backupPath 2>/dev/null || true',
+      final trimmedDomain = publicDomain?.trim() ?? '';
+      final existing = await _detectExistingDirectSetup(
+        client: client,
+        host: host,
+        gatewayPort: gatewayPort,
+        preferredDomain: trimmedDomain.isEmpty ? null : trimmedDomain,
+        gateway: gateway,
+        auth: auth,
+        controlUi: controlUi,
       );
-      await _writeFile(client, configPath, jsonEncode(config));
-
-      final restart = await _restartGatewayViaExistingSession(client);
-      if (!restart) {
+      if (existing['installed'] == true && trimmedDomain.isEmpty) {
         return {
-          'success': false,
-          'error': 'Gateway 配置已写入，但重启失败，请手动执行 systemctl restart openclaw',
+          'success': true,
+          'reused': true,
+          'mode': existing['mode'] ?? 'direct-ws',
+          'gatewayUrl': existing['gatewayUrl'],
+          'gatewayToken': existing['gatewayToken'],
           'configPath': configPath,
-          'backupPath': backupPath,
+          'backupPath': null,
+          'note': '检测到服务器已完成直连部署，已直接复用现有配置',
+        };
+      }
+      if (existing['installed'] == true &&
+          trimmedDomain.isNotEmpty &&
+          existing['wssReadyForPreferredDomain'] == true) {
+        return {
+          'success': true,
+          'reused': true,
+          'mode': 'wss',
+          'gatewayUrl': 'wss://$trimmedDomain',
+          'gatewayToken': existing['gatewayToken'],
+          'configPath': configPath,
+          'backupPath': null,
+          'note': '检测到 $trimmedDomain 已部署 WSS，已直接复用',
         };
       }
 
-      final trimmedDomain = publicDomain?.trim() ?? '';
+      final alreadyInstalled = existing['installed'] == true;
+      final existingToken = (existing['gatewayToken'] as String?)?.trim();
+
+      final token = (auth['token'] as String?)?.trim().isNotEmpty == true
+          ? (auth['token'] as String)
+          : (existingToken?.isNotEmpty == true
+                ? existingToken!
+                : _generateGatewayToken());
+
+      String? backupPath;
+      if (!alreadyInstalled) {
+        auth['mode'] = 'token';
+        auth['token'] = token;
+        gateway['auth'] = auth;
+        gateway['bind'] = 'loopback';
+        gateway['port'] = gatewayPort;
+
+        controlUi['allowedOrigins'] = ['*'];
+        controlUi['allowInsecureAuth'] = true;
+        gateway['controlUi'] = controlUi;
+        config['gateway'] = gateway;
+
+        backupPath =
+            '$configPath.backup.${DateTime.now().millisecondsSinceEpoch}';
+        await _executeCommand(
+          client,
+          'cp $configPath $backupPath 2>/dev/null || true',
+        );
+        await _writeFile(client, configPath, jsonEncode(config));
+
+        final restart = await _restartGatewayViaExistingSession(client);
+        if (!restart) {
+          return {
+            'success': false,
+            'error': 'Gateway 配置已写入，但重启失败，请手动执行 systemctl restart openclaw',
+            'configPath': configPath,
+            'backupPath': backupPath,
+          };
+        }
+      }
+
       if (trimmedDomain.isNotEmpty) {
         final proxy = await _setupCaddyProxy(
           client: client,
@@ -329,6 +382,7 @@ class SshConfigService {
             'gatewayToken': token,
             'configPath': configPath,
             'backupPath': backupPath,
+            'reused': alreadyInstalled,
             'note': '已部署 WSS 反向代理，移动端可直接直连',
           };
         }
@@ -340,6 +394,7 @@ class SshConfigService {
           'gatewayToken': token,
           'configPath': configPath,
           'backupPath': backupPath,
+          'reused': alreadyInstalled,
           'warning': proxy['error'] ?? 'WSS 部署失败，已回退到 WS 直连',
         };
       }
@@ -351,6 +406,7 @@ class SshConfigService {
         'gatewayToken': token,
         'configPath': configPath,
         'backupPath': backupPath,
+        'reused': alreadyInstalled,
         'note': '已启用直连模式（无 WSS），建议后续配置域名启用 TLS',
       };
     } catch (e) {
@@ -386,6 +442,111 @@ class SshConfigService {
       buffer.write(chars[random.nextInt(chars.length)]);
     }
     return buffer.toString();
+  }
+
+  static Future<Map<String, dynamic>> _detectExistingDirectSetup({
+    required SSHClient client,
+    required String host,
+    required int gatewayPort,
+    required Map<String, dynamic> gateway,
+    required Map<String, dynamic> auth,
+    required Map<String, dynamic> controlUi,
+    String? preferredDomain,
+  }) async {
+    final token = (auth['token'] as String?)?.trim() ?? '';
+    final bind =
+        (gateway['bind'] as String?)?.trim().toLowerCase() ?? 'loopback';
+    final mode = (auth['mode'] as String?)?.trim().toLowerCase() ?? 'token';
+    final allowInsecureAuth = controlUi['allowInsecureAuth'] == true;
+    final hasWildcard = _hasWildcardOrigin(controlUi['allowedOrigins']);
+
+    final installed =
+        token.isNotEmpty &&
+        mode == 'token' &&
+        bind == 'loopback' &&
+        allowInsecureAuth &&
+        hasWildcard;
+    if (!installed) {
+      return {'installed': false, 'gatewayToken': token};
+    }
+
+    String? selectedWssDomain;
+    bool caddyActive = false;
+    try {
+      final caddyFile = await _executeCommand(
+        client,
+        'test -f /etc/caddy/Caddyfile && cat /etc/caddy/Caddyfile || true',
+      );
+      if (caddyFile.trim().isNotEmpty) {
+        final domains = _extractCaddyDomainsForPort(caddyFile, gatewayPort);
+        if (domains.isNotEmpty) {
+          final active = await _executeCommand(
+            client,
+            'systemctl is-active caddy 2>/dev/null || true',
+          );
+          caddyActive = active.contains('active');
+          if (caddyActive) {
+            if (preferredDomain != null && preferredDomain.isNotEmpty) {
+              if (domains.contains(preferredDomain)) {
+                selectedWssDomain = preferredDomain;
+              }
+            } else {
+              selectedWssDomain = domains.first;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    final gatewayUrl = selectedWssDomain != null
+        ? 'wss://$selectedWssDomain'
+        : 'ws://$host:$gatewayPort';
+    return {
+      'installed': true,
+      'mode': selectedWssDomain != null ? 'wss' : 'direct-ws',
+      'gatewayUrl': gatewayUrl,
+      'gatewayToken': token,
+      'wssReadyForPreferredDomain': selectedWssDomain != null,
+    };
+  }
+
+  static bool _hasWildcardOrigin(dynamic allowedOrigins) {
+    if (allowedOrigins is! List) {
+      return false;
+    }
+    return allowedOrigins.any((item) => item.toString().trim() == '*');
+  }
+
+  static List<String> _extractCaddyDomainsForPort(
+    String caddyFile,
+    int gatewayPort,
+  ) {
+    final lines = caddyFile.split('\n');
+    final domains = <String>[];
+    String? currentDomain;
+    final reverseProxy = RegExp(r'^\s*reverse_proxy\s+127\.0\.0\.1:(\d+)\s*$');
+    final blockStart = RegExp(r'^\s*([A-Za-z0-9.-]+)\s*\{\s*$');
+
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      final startMatch = blockStart.firstMatch(line);
+      if (startMatch != null) {
+        currentDomain = startMatch.group(1);
+        continue;
+      }
+      if (line == '}') {
+        currentDomain = null;
+        continue;
+      }
+      final proxyMatch = reverseProxy.firstMatch(rawLine);
+      if (proxyMatch != null && currentDomain != null) {
+        final port = int.tryParse(proxyMatch.group(1) ?? '');
+        if (port == gatewayPort && !domains.contains(currentDomain)) {
+          domains.add(currentDomain);
+        }
+      }
+    }
+    return domains;
   }
 
   static Future<bool> _restartGatewayViaExistingSession(

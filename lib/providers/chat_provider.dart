@@ -215,43 +215,89 @@ class ChatProvider with ChangeNotifier {
       notifyListeners();
       return;
     }
+
+    if (event.state == 'delta' && event.message != null) {
+      final role = event.message!['role'] as String? ?? '';
+      if (role == 'assistant') {
+        final text = _extractText(event.message!['content']);
+        if (text.isNotEmpty) {
+          _streamingContent = text;
+          _updateStreamingMessage();
+        }
+      }
+      return;
+    }
     
     // 处理完成状态
     if (event.state == 'final' || event.state == 'aborted') {
       print('chat 完成: ${event.state}');
-      // 优先使用 agent 流式内容，chat payload 仅作为兜底，避免重复消息
-      if (_streamingContent.isEmpty && event.message != null) {
-        _processChatMessage(event.message!, event.runId);
+      var committed = false;
+      if (event.message != null) {
+        committed = _processChatMessage(event.message!, event.runId);
       }
+      if (!committed) {
+        committed = _finalizeStreamingMessage(event.runId);
+      }
+      _removeLoadingMessage();
       _clearPendingRun(event.runId);
-      // 刷新历史获取最终消息
-      _refreshHistoryAfterRun();
+      if (!committed && event.state == 'final') {
+        unawaited(_refreshHistoryAfterRun());
+      } else {
+        notifyListeners();
+      }
       return;
     }
   }
   
-  void _processChatMessage(Map<String, dynamic> message, String? runId) {
+  bool _processChatMessage(Map<String, dynamic> message, String? runId) {
     final role = message['role'] as String? ?? '';
-    
-    if (role == 'assistant') {
-      final content = message['content'];
-      String text = _extractText(content);
-      
-      if (text.isNotEmpty) {
-        _removeLoadingMessage();
-        
-        final aiMessage = Message(
-          id: runId ?? DateTime.now().millisecondsSinceEpoch.toString(),
-          content: text,
-          type: MessageType.ai,
-          timestamp: DateTime.now(),
-          isLoading: false,
-        );
-        _upsertMessage(aiMessage);
-        _streamingContent = '';
-        notifyListeners();
-      }
+    if (role != 'assistant') {
+      return false;
     }
+    
+    final content = message['content'];
+    String text = _extractText(content);
+    text = _formatQuickCommandResponse(text);
+    _updateContextUsageFromText(text);
+
+    if (text.isEmpty) {
+      return false;
+    }
+
+    final aiMessage = Message(
+      id: runId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      content: text,
+      type: MessageType.ai,
+      timestamp: DateTime.now(),
+      isLoading: false,
+    );
+    _upsertMessage(aiMessage);
+    _streamingContent = '';
+    return true;
+  }
+
+  bool _finalizeStreamingMessage(String? runId) {
+    if (_streamingContent.isEmpty) {
+      return false;
+    }
+
+    final formatted = _formatQuickCommandResponse(_streamingContent);
+    if (formatted.trim().isEmpty) {
+      _streamingContent = '';
+      return false;
+    }
+
+    _updateContextUsageFromText(formatted);
+    final aiMessage = Message(
+      id: runId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      content: formatted,
+      type: MessageType.ai,
+      timestamp: DateTime.now(),
+      isLoading: false,
+    );
+    _upsertMessage(aiMessage);
+    _streamingContent = '';
+    return true;
   }
   
   String _extractText(dynamic content) {
@@ -286,35 +332,53 @@ class ChatProvider with ChangeNotifier {
       case 'assistant':
         // 流式文本输出
         final text = data['text'];
-        if (text != null) {
-          final incoming = text.toString();
+        final delta = data['delta'];
+        if (text != null || delta != null) {
+          final incoming = text?.toString() ?? '';
+          final deltaText = delta?.toString() ?? '';
           if (_streamingContent.isEmpty) {
-            _streamingContent = incoming;
+            _streamingContent = incoming.isNotEmpty ? incoming : deltaText;
           } else if (incoming.startsWith(_streamingContent)) {
             _streamingContent = incoming;
-          } else {
+          } else if (incoming.isNotEmpty) {
             _streamingContent += incoming;
+          } else if (deltaText.isNotEmpty) {
+            _streamingContent += deltaText;
+          } else {
+            _streamingContent = incoming;
           }
           _updateStreamingMessage();
+        }
+        break;
+
+      case 'lifecycle':
+        final phase = data['phase']?.toString();
+        if (phase == 'end') {
+          final committed = _finalizeStreamingMessage(event.runId);
+          _removeLoadingMessage();
+          _clearPendingRun(event.runId);
+          if (committed) {
+            notifyListeners();
+          }
+        } else if (phase == 'error') {
+          final error = data['error'];
+          if (error != null) {
+            _errorMessage = error.toString();
+          }
+          _streamingContent = '';
+          _removeLoadingMessage();
+          _clearPendingRun(event.runId);
+          notifyListeners();
         }
         break;
         
       case 'done':
         // 流式完成
         print('agent done, content length: ${_streamingContent.length}');
-        if (_streamingContent.isNotEmpty) {
-          _removeLoadingMessage();
-          final aiMessage = Message(
-            id: event.runId,
-            content: _streamingContent,
-            type: MessageType.ai,
-            timestamp: DateTime.now(),
-            isLoading: false,
-          );
-          _upsertMessage(aiMessage);
-          _streamingContent = '';
-        }
+        _finalizeStreamingMessage(event.runId);
+        _removeLoadingMessage();
         _clearPendingRun(event.runId);
+        notifyListeners();
         break;
         
       case 'usage':
@@ -322,6 +386,19 @@ class ChatProvider with ChangeNotifier {
         final input = (data['input'] as num?)?.toInt() ?? 0;
         final output = (data['output'] as num?)?.toInt() ?? 0;
         _totalTokens = input + output;
+        final contextTokens = (data['contextTokens'] as num?)?.toInt();
+        final maxContextTokens = (data['maxContextTokens'] as num?)?.toInt();
+        final contextPct = (data['contextUsagePct'] as num?)?.toDouble();
+        if (contextPct != null) {
+          _contextUsage = (contextPct / 100).clamp(0.0, 1.0);
+          notifyListeners();
+        } else if (contextTokens != null &&
+            contextTokens > 0 &&
+            maxContextTokens != null &&
+            maxContextTokens > 0) {
+          _contextUsage = (contextTokens / maxContextTokens).clamp(0.0, 1.0);
+          notifyListeners();
+        }
         break;
     }
   }
@@ -362,6 +439,40 @@ class ChatProvider with ChangeNotifier {
     }
     if (runId == _currentRunId) {
       _currentRunId = null;
+    }
+  }
+
+  String _formatQuickCommandResponse(String text) {
+    if (!text.contains('Context:') || !text.contains('Session:')) {
+      return text;
+    }
+    final compact = text
+        .replaceAll('\n', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final parts = compact
+        .replaceAll(' • ', ' · ')
+        .split(' · ')
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
+
+    final head = parts.first;
+    final tail = parts.skip(1).map((p) => '- $p').join('\n');
+    return tail.isEmpty ? head : '$head\n$tail';
+  }
+
+  void _updateContextUsageFromText(String text) {
+    final match = RegExp(r'Context:\s*[^\n\r]*\((\d{1,3})%\)').firstMatch(text);
+    if (match == null) return;
+
+    final pct = int.tryParse(match.group(1) ?? '');
+    if (pct == null) return;
+
+    final clamped = pct.clamp(0, 100) / 100.0;
+    if ((clamped - _contextUsage).abs() > 0.001) {
+      _contextUsage = clamped;
+      notifyListeners();
     }
   }
   

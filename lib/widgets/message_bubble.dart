@@ -17,6 +17,7 @@ class MessageBubble extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final isUser = message.type == MessageType.user;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hasMarkdownTable = _containsMarkdownTable(message.content);
     final timeText = MaterialLocalizations.of(context).formatTimeOfDay(
       TimeOfDay.fromDateTime(message.timestamp),
       alwaysUse24HourFormat: true,
@@ -49,31 +50,21 @@ class MessageBubble extends StatelessWidget {
               ),
               child: message.isLoading
                   ? _buildLoadingIndicator(l10n)
-                  : MarkdownBody(
-                      data: message.content,
-                      selectable: true,
-                      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                        p: TextStyle(
-                          fontSize: 16,
-                          color: isUser ? Colors.white : null,
-                          height: 1.45,
-                        ),
-                        code: TextStyle(
-                          fontSize: 14,
-                          color: isUser ? Colors.white : null,
-                          fontFamily: 'monospace',
-                        ),
-                        codeblockDecoration: BoxDecoration(
-                          color: isUser
-                              ? Colors.white.withValues(alpha: 0.14)
-                              : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        blockquote: TextStyle(
-                          color: isUser ? Colors.white70 : Theme.of(context).textTheme.bodyMedium?.color,
-                        ),
-                      ),
-                    ),
+                  : (hasMarkdownTable
+                      ? LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minWidth: constraints.maxWidth + 260,
+                                ),
+                                child: _buildMarkdown(context, isUser),
+                              ),
+                            );
+                          },
+                        )
+                      : _buildMarkdown(context, isUser)),
             ),
             if (!message.isLoading) ...[
               const SizedBox(height: 4),
@@ -89,6 +80,40 @@ class MessageBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildMarkdown(BuildContext context, bool isUser) {
+    return MarkdownBody(
+      data: message.content,
+      selectable: true,
+      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+        p: TextStyle(
+          fontSize: 16,
+          color: isUser ? Colors.white : null,
+          height: 1.45,
+        ),
+        code: TextStyle(
+          fontSize: 14,
+          color: isUser ? Colors.white : null,
+          fontFamily: 'monospace',
+        ),
+        codeblockDecoration: BoxDecoration(
+          color: isUser
+              ? Colors.white.withValues(alpha: 0.14)
+              : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        blockquote: TextStyle(
+          color: isUser ? Colors.white70 : Theme.of(context).textTheme.bodyMedium?.color,
+        ),
+      ),
+    );
+  }
+
+  bool _containsMarkdownTable(String text) {
+    final hasPipeLine = RegExp(r'^\s*\|.*\|\s*$', multiLine: true).hasMatch(text);
+    final hasSeparator = RegExp(r'^\s*\|?\s*:?-{3,}', multiLine: true).hasMatch(text);
+    return hasPipeLine && hasSeparator;
   }
 
   Widget _buildLoadingIndicator(AppLocalizations l10n) {

@@ -196,7 +196,7 @@ class GatewayService extends ChangeNotifier {
   /// 开始监听 Gateway 事件
   void _startListeningToEvents() {
     _chatSubscription = _protocolService.chatEventStream.listen((event) {
-      if (event.state == 'done' || event.state == 'error') {
+      if (event.state == 'final' || event.state == 'aborted' || event.state == 'error') {
         _currentRunId = null;
       }
       notifyListeners();

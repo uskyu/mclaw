@@ -29,22 +29,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      final target = _scrollController.position.maxScrollExtent;
+      _fastScrollTo(target);
     }
   }
 
   void _scrollToTop() {
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      _fastScrollTo(0);
     }
+  }
+
+  void _fastScrollTo(double target) {
+    if (!_scrollController.hasClients) return;
+    _scrollController.jumpTo(target);
   }
 
   bool _isNearBottom() {

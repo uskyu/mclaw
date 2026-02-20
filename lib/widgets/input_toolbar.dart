@@ -28,6 +28,15 @@ class InputToolbar extends StatefulWidget {
 
 class _InputToolbarState extends State<InputToolbar>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  static const List<MapEntry<String, String>> _quickCommands = [
+    MapEntry('/status', '状态'),
+    MapEntry('/context list', '上下文列表'),
+    MapEntry('/context detail', '上下文详情'),
+    MapEntry('/usage tokens', '用量摘要'),
+    MapEntry('/usage full', '用量完整'),
+    MapEntry('/usage off', '关闭用量'),
+  ];
+
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isAttachmentExpanded = false;
@@ -212,6 +221,8 @@ class _InputToolbarState extends State<InputToolbar>
                   _buildOutlineButton(),
                   const SizedBox(width: 8),
                   _buildContextButton(),
+                  const SizedBox(width: 8),
+                  _buildQuickCommandButton(),
                   const Spacer(),
                   _buildAnimatedAttachmentButton(),
                 ],
@@ -342,6 +353,67 @@ class _InputToolbarState extends State<InputToolbar>
               '$percentage%',
               style: const TextStyle(
                 fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.appleBlue,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickCommandButton() {
+    return PopupMenuButton<String>(
+      tooltip: '快捷指令',
+      onSelected: (command) => _sendMessage(command),
+      itemBuilder: (context) => _quickCommands
+          .map(
+            (entry) => PopupMenuItem<String>(
+              value: entry.key,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      entry.value,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    entry.key,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.appleGray,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? AppTheme.darkSurface
+              : AppTheme.appleLightGray,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.flash_on_rounded,
+              size: 18,
+              color: AppTheme.appleBlue,
+            ),
+            SizedBox(width: 4),
+            Text(
+              '指令',
+              style: TextStyle(
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.appleBlue,
               ),

@@ -12,6 +12,8 @@ class InputToolbar extends StatefulWidget {
   final Function(Agent) onAgentChanged;
   final double contextUsage;
   final bool isConnected;
+  final List<OutlineItem> outlineItems;
+  final ValueChanged<int>? onOutlineSelected;
 
   const InputToolbar({
     super.key,
@@ -20,6 +22,8 @@ class InputToolbar extends StatefulWidget {
     required this.onAgentChanged,
     required this.contextUsage,
     this.isConnected = true,
+    this.outlineItems = const [],
+    this.onOutlineSelected,
   });
 
   @override
@@ -126,7 +130,12 @@ class _InputToolbarState extends State<InputToolbar>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const OutlineDrawer(),
+      builder: (context) => OutlineDrawer(
+        items: widget.outlineItems,
+        onSelected: (item) {
+          widget.onOutlineSelected?.call(item.messageIndex);
+        },
+      ),
     );
   }
 
@@ -205,7 +214,8 @@ class _InputToolbarState extends State<InputToolbar>
                   ],
                 ),
                 const SizedBox(height: 4),
-                Flexible(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 320),
                   child: ListView.separated(
                     shrinkWrap: true,
                     itemCount: _quickCommands.length,

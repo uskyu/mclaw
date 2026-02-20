@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
+import '../models/message.dart';
 import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
 import '../screens/server_management_screen.dart';
@@ -173,6 +174,14 @@ class Sidebar extends StatelessWidget {
               provider.currentConversationId,
               conversation.id,
             );
+            final displayTitle = provider.getConversationDisplayTitle(
+              conversation.id,
+              fallbackTitle: conversation.title,
+            );
+            final hasLocalNote =
+                (provider.getConversationNote(conversation.id) ?? '')
+                    .trim()
+                    .isNotEmpty;
             return ListTile(
               dense: true,
               selected: selected,
@@ -185,7 +194,7 @@ class Sidebar extends StatelessWidget {
                     : Theme.of(context).iconTheme.color,
               ),
               title: Text(
-                conversation.title,
+                displayTitle,
                 style: const TextStyle(fontSize: 15),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -200,6 +209,49 @@ class Sidebar extends StatelessWidget {
                   fontSize: 12,
                   color: Theme.of(context).textTheme.bodySmall?.color,
                 ),
+              ),
+              trailing: PopupMenuButton<String>(
+                tooltip: '会话操作',
+                icon: Icon(
+                  Icons.more_horiz,
+                  size: 18,
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                ),
+                onSelected: (value) {
+                  if (value == 'note') {
+                    _renameConversation(context, provider, conversation);
+                  } else if (value == 'clear_note') {
+                    provider.clearConversationNote(conversation.id);
+                  } else if (value == 'delete') {
+                    _deleteConversation(context, provider, conversation);
+                  }
+                },
+                itemBuilder: (context) {
+                  final isMain = _isSameSessionKey(conversation.id, 'main');
+                  final items = <PopupMenuEntry<String>>[
+                    const PopupMenuItem<String>(
+                      value: 'note',
+                      child: Text('本地备注'),
+                    ),
+                  ];
+                  if (hasLocalNote) {
+                    items.add(
+                      const PopupMenuItem<String>(
+                        value: 'clear_note',
+                        child: Text('清除备注'),
+                      ),
+                    );
+                  }
+                  if (provider.canManageSessions && !isMain) {
+                    items.add(
+                      const PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text('删除对话'),
+                      ),
+                    );
+                  }
+                  return items;
+                },
               ),
               onTap: () {
                 provider.switchConversation(conversation.id);
@@ -222,6 +274,98 @@ class Sidebar extends StatelessWidget {
 
   bool _isSameSessionKey(String a, String b) {
     return _normalizeSessionKey(a) == _normalizeSessionKey(b);
+  }
+
+  Future<void> _renameConversation(
+    BuildContext context,
+    ChatProvider provider,
+    Conversation conversation,
+  ) async {
+    final controller = TextEditingController(
+      text: provider.getConversationNote(conversation.id) ?? '',
+    );
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('本地备注'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 1,
+          maxLength: 28,
+          decoration: const InputDecoration(
+            hintText: '输入备注（仅本机显示）',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) {
+      return;
+    }
+
+    await provider.setConversationNote(conversation.id, controller.text);
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('已保存备注'),
+        backgroundColor: AppTheme.appleGreen,
+      ),
+    );
+  }
+
+  Future<void> _deleteConversation(
+    BuildContext context,
+    ChatProvider provider,
+    Conversation conversation,
+  ) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除对话'),
+        content: Text(
+          '确认删除「${provider.getConversationDisplayTitle(conversation.id, fallbackTitle: conversation.title)}」吗？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.appleRed,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) {
+      return;
+    }
+
+    final ok = await provider.deleteConversation(conversation.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? '已删除对话' : (provider.errorMessage ?? '删除失败')),
+        backgroundColor: ok ? AppTheme.appleGreen : AppTheme.appleRed,
+      ),
+    );
   }
 
   String _formatConversationTime(

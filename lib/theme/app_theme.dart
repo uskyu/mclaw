@@ -11,17 +11,17 @@ class AppTheme {
   static const Color appleDarkGray = Color(0xFF1C1C1E);
   static const Color appleBackground = Color(0xFFF2F2F7);
   static const Color appleCard = Colors.white;
-  
+
   // 龙虾主题颜色
   static const Color lobsterRed = Color(0xFFFF6B6B);
   static const Color lobsterOrange = Color(0xFFFF8E53);
   static const Color lobsterDark = Color(0xFFE85D4E);
-  
+
   // 深色模式颜色
   static const Color darkBackground = Color(0xFF000000);
   static const Color darkCard = Color(0xFF1C1C1E);
   static const Color darkSurface = Color(0xFF2C2C2E);
-  
+
   // 气泡颜色
   static const Color userBubble = Color(0xFF007AFF);
   static const Color aiBubble = Color(0xFFE5E5EA);
@@ -41,9 +41,11 @@ class AppTheme {
       scaffoldBackgroundColor: appleBackground,
       appBarTheme: const AppBarTheme(
         backgroundColor: appleCard,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: Colors.black,
         elevation: 0,
-        centerTitle: true,
-        iconTheme: IconThemeData(color: appleBlue),
+        centerTitle: false,
+        iconTheme: IconThemeData(color: Colors.black87),
         titleTextStyle: TextStyle(
           color: Colors.black,
           fontSize: 17,
@@ -53,9 +55,7 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: appleCard,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: appleCard,
@@ -78,18 +78,9 @@ class AppTheme {
           fontWeight: FontWeight.w600,
           color: Colors.black,
         ),
-        bodyLarge: TextStyle(
-          fontSize: 17,
-          color: Colors.black,
-        ),
-        bodyMedium: TextStyle(
-          fontSize: 15,
-          color: Colors.black87,
-        ),
-        bodySmall: TextStyle(
-          fontSize: 13,
-          color: appleGray,
-        ),
+        bodyLarge: TextStyle(fontSize: 17, color: Colors.black),
+        bodyMedium: TextStyle(fontSize: 15, color: Colors.black87),
+        bodySmall: TextStyle(fontSize: 13, color: appleGray),
       ),
     );
   }
@@ -108,9 +99,11 @@ class AppTheme {
       scaffoldBackgroundColor: darkBackground,
       appBarTheme: const AppBarTheme(
         backgroundColor: darkCard,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: Colors.white,
         elevation: 0,
-        centerTitle: true,
-        iconTheme: IconThemeData(color: appleBlue),
+        centerTitle: false,
+        iconTheme: IconThemeData(color: Colors.white),
         titleTextStyle: TextStyle(
           color: Colors.white,
           fontSize: 17,
@@ -120,9 +113,7 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: darkCard,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: darkCard,
@@ -130,10 +121,7 @@ class AppTheme {
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
       ),
-      dividerTheme: const DividerThemeData(
-        color: darkSurface,
-        thickness: 0.5,
-      ),
+      dividerTheme: const DividerThemeData(color: darkSurface, thickness: 0.5),
       textTheme: const TextTheme(
         titleLarge: TextStyle(
           fontSize: 34,
@@ -145,18 +133,9 @@ class AppTheme {
           fontWeight: FontWeight.w600,
           color: Colors.white,
         ),
-        bodyLarge: TextStyle(
-          fontSize: 17,
-          color: Colors.white,
-        ),
-        bodyMedium: TextStyle(
-          fontSize: 15,
-          color: Colors.white70,
-        ),
-        bodySmall: TextStyle(
-          fontSize: 13,
-          color: appleGray,
-        ),
+        bodyLarge: TextStyle(fontSize: 17, color: Colors.white),
+        bodyMedium: TextStyle(fontSize: 15, color: Colors.white70),
+        bodySmall: TextStyle(fontSize: 13, color: appleGray),
       ),
     );
   }

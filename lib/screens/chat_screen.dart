@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/input_toolbar.dart';
+import '../widgets/right_drawers.dart';
 import '../providers/chat_provider.dart';
 import 'server_management_screen.dart';
 
@@ -274,6 +275,49 @@ class _ChatScreenState extends State<ChatScreen> {
     return _smoothScrollTo(estimated);
   }
 
+  String _outlineTitle(String text) {
+    final normalized = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.isEmpty) {
+      return '未命名消息';
+    }
+    return normalized.length <= 32
+        ? normalized
+        : '${normalized.substring(0, 32)}...';
+  }
+
+  String _outlineTime(DateTime time) {
+    final hh = time.hour.toString().padLeft(2, '0');
+    final mm = time.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
+  }
+
+  List<OutlineItem> _buildOutlineItems(List<Message> messages) {
+    final items = <OutlineItem>[];
+    for (var i = 0; i < messages.length; i++) {
+      final msg = messages[i];
+      if (msg.type != MessageType.user) {
+        continue;
+      }
+      final text = msg.content.trim();
+      if (text.isEmpty) {
+        continue;
+      }
+      items.add(
+        OutlineItem(
+          messageIndex: i,
+          title: _outlineTitle(text),
+          subtitle: _outlineTime(msg.timestamp),
+        ),
+      );
+    }
+
+    const maxItems = 24;
+    if (items.length <= maxItems) {
+      return items;
+    }
+    return items.sublist(items.length - maxItems);
+  }
+
   Future<void> _jumpConversation({
     required List<Message> messages,
     required bool forward,
@@ -487,6 +531,15 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
                 contextUsage: provider.contextUsage,
                 isConnected: provider.isConnected,
+                outlineItems: _buildOutlineItems(provider.messages),
+                onOutlineSelected: (messageIndex) {
+                  _runSafeScrollAction(
+                    () => _scrollToMessageIndex(
+                      index: messageIndex,
+                      totalCount: provider.messages.length,
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -594,19 +647,40 @@ class _ChatScreenState extends State<ChatScreen> {
 
   PreferredSizeWidget _buildAppBar(AppLocalizations l10n) {
     return AppBar(
+      centerTitle: false,
+      titleSpacing: 0,
       leading: IconButton(
         icon: const Icon(Icons.menu),
         onPressed: () => _scaffoldKey.currentState?.openDrawer(),
       ),
-      title: Text(l10n.newChat),
+      title: Consumer<ChatProvider>(
+        builder: (context, provider, child) {
+          return Text(
+            provider.currentConversationDisplayTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          );
+        },
+      ),
       actions: [
         Consumer<ChatProvider>(
           builder: (context, provider, child) {
             final isConnected = provider.isConnected;
             final isConnecting = provider.isConnecting;
+            final serverName = provider.currentServerName ?? '服务器';
+            final statusText = isConnecting
+                ? '连接中'
+                : isConnected
+                ? l10n.online
+                : '离线';
+            final statusColor = isConnecting
+                ? Colors.orange
+                : isConnected
+                ? AppTheme.appleGreen
+                : AppTheme.appleRed;
 
-            return TextButton.icon(
-              onPressed: () {
+            return InkWell(
+              onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -614,31 +688,63 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 );
               },
-              icon: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: isConnecting
-                      ? Colors.orange
-                      : isConnected
-                      ? AppTheme.appleGreen
-                      : AppTheme.appleRed,
-                  shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
                 ),
-              ),
-              label: Text(
-                isConnecting
-                    ? '连接中'
-                    : isConnected
-                    ? l10n.online
-                    : '离线',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: isConnecting
-                      ? Colors.orange
-                      : isConnected
-                      ? AppTheme.appleGreen
-                      : AppTheme.appleRed,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? AppTheme.darkSurface.withValues(alpha: 0.8)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : AppTheme.appleLightGray,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.dns_rounded,
+                      size: 16,
+                      color: Theme.of(context).textTheme.bodyMedium?.color,
+                    ),
+                    const SizedBox(width: 6),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 80),
+                      child: Text(
+                        serverName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      statusText,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );

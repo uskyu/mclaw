@@ -9,6 +9,7 @@ import '../services/secure_storage_service.dart';
 
 class ChatProvider with ChangeNotifier {
   static const int _historyFetchLimit = 80;
+  static const int _maxTitleLength = 28;
 
   final GatewayService _gatewayService;
   StreamSubscription? _chatSubscription;
@@ -27,6 +28,7 @@ class ChatProvider with ChangeNotifier {
   final int _maxTokens = 8000;
 
   final List<Conversation> _conversations = [];
+  final Map<String, String> _conversationNotes = {};
   String _currentConversationId = 'main';
   Timer? _conversationRefreshTimer;
 
@@ -53,6 +55,21 @@ class ChatProvider with ChangeNotifier {
   int get totalTokens => _totalTokens;
   int get maxTokens => _maxTokens;
   ConnectionStatus get connectionStatus => _gatewayService.status;
+  String? get currentServerName => _gatewayService.currentServer?.name;
+  bool get canManageSessions => _gatewayService.canManageSessions;
+  String get currentConversationDisplayTitle {
+    final matched = _conversations.where(
+      (c) => _isSameSessionKey(c.id, _currentConversationId),
+    );
+    final fallback = matched.isNotEmpty
+        ? matched.first.title
+        : _fallbackTitleForSessionKey(_currentSessionKey);
+    return getConversationDisplayTitle(
+      _currentConversationId,
+      fallbackTitle: fallback,
+    );
+  }
+
   bool get isStreaming => _streamingContent.isNotEmpty;
 
   Future<void> _init() async {
@@ -63,6 +80,7 @@ class ChatProvider with ChangeNotifier {
       _handleAgentEvent,
     );
 
+    await _loadConversationNotes();
     await _autoConnect();
   }
 
@@ -477,6 +495,56 @@ class ChatProvider with ChangeNotifier {
     return _normalizeSessionKey(a) == _normalizeSessionKey(b);
   }
 
+  String _clipTitle(String text) {
+    final clean = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (clean.length <= _maxTitleLength) {
+      return clean;
+    }
+    return '${clean.substring(0, _maxTitleLength)}...';
+  }
+
+  Future<void> _loadConversationNotes() async {
+    try {
+      final notes = await SecureStorageService.loadConversationNotes();
+      _conversationNotes
+        ..clear()
+        ..addAll(notes);
+    } catch (e) {
+      print('加载本地备注失败: $e');
+    }
+  }
+
+  Future<void> _saveConversationNotes() async {
+    await SecureStorageService.saveConversationNotes(_conversationNotes);
+  }
+
+  String getConversationDisplayTitle(
+    String conversationId, {
+    String? fallbackTitle,
+  }) {
+    final normalizedKey = _normalizeSessionKey(conversationId);
+    final note = _conversationNotes[normalizedKey];
+    if (note != null && note.trim().isNotEmpty) {
+      return _clipTitle(note);
+    }
+
+    if (fallbackTitle != null && fallbackTitle.trim().isNotEmpty) {
+      return _clipTitle(fallbackTitle);
+    }
+
+    final matched = _conversations.where(
+      (c) => _isSameSessionKey(c.id, conversationId),
+    );
+    if (matched.isNotEmpty) {
+      return _clipTitle(matched.first.title);
+    }
+    return _clipTitle(_fallbackTitleForSessionKey(conversationId));
+  }
+
+  String? getConversationNote(String conversationId) {
+    return _conversationNotes[_normalizeSessionKey(conversationId)];
+  }
+
   String _fallbackTitleForSessionKey(String key) {
     final normalized = key.trim();
     if (normalized.isEmpty) {
@@ -821,6 +889,133 @@ class ChatProvider with ChangeNotifier {
     _conversations.removeWhere((c) => _isSameSessionKey(c.id, newId));
     _conversations.insert(0, newConversation);
     switchConversation(newId);
+  }
+
+  Future<void> setConversationNote(String conversationId, String note) async {
+    final normalized = _normalizeSessionKey(conversationId);
+    final cleaned = note.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (cleaned.isEmpty) {
+      _conversationNotes.remove(normalized);
+    } else {
+      _conversationNotes[normalized] = cleaned;
+    }
+    await _saveConversationNotes();
+    notifyListeners();
+  }
+
+  Future<void> clearConversationNote(String conversationId) async {
+    final normalized = _normalizeSessionKey(conversationId);
+    if (_conversationNotes.remove(normalized) != null) {
+      await _saveConversationNotes();
+      notifyListeners();
+    }
+  }
+
+  Future<bool> renameConversation(
+    String conversationId,
+    String newTitle,
+  ) async {
+    final normalizedTitle = newTitle.trim();
+    if (normalizedTitle.isEmpty) {
+      _errorMessage = '名称不能为空';
+      notifyListeners();
+      return false;
+    }
+    if (!_gatewayService.isConnected) {
+      _errorMessage = '未连接到服务器';
+      notifyListeners();
+      return false;
+    }
+    if (!_gatewayService.canManageSessions) {
+      _errorMessage = '当前权限不支持会话管理（需要 operator.admin）';
+      notifyListeners();
+      return false;
+    }
+
+    final matched = _conversations.where(
+      (c) => _isSameSessionKey(c.id, conversationId),
+    );
+    final targetId = matched.isNotEmpty ? matched.first.id : conversationId;
+
+    final ok = await _gatewayService.renameSessionLabel(
+      key: targetId,
+      label: normalizedTitle,
+    );
+    if (!ok) {
+      _errorMessage = _gatewayService.errorMessage ?? '重命名失败';
+      notifyListeners();
+      return false;
+    }
+
+    for (var i = 0; i < _conversations.length; i++) {
+      if (_isSameSessionKey(_conversations[i].id, targetId)) {
+        final item = _conversations[i];
+        _conversations[i] = Conversation(
+          id: item.id,
+          title: normalizedTitle,
+          lastUpdated: item.lastUpdated,
+          messages: item.messages,
+        );
+        break;
+      }
+    }
+
+    _errorMessage = null;
+    notifyListeners();
+    unawaited(_loadConversations());
+    return true;
+  }
+
+  Future<bool> deleteConversation(String conversationId) async {
+    if (_isSameSessionKey(conversationId, 'main')) {
+      _errorMessage = '主会话不可删除';
+      notifyListeners();
+      return false;
+    }
+    if (!_gatewayService.isConnected) {
+      _errorMessage = '未连接到服务器';
+      notifyListeners();
+      return false;
+    }
+    if (!_gatewayService.canManageSessions) {
+      _errorMessage = '当前权限不支持会话管理（需要 operator.admin）';
+      notifyListeners();
+      return false;
+    }
+
+    final matched = _conversations.where(
+      (c) => _isSameSessionKey(c.id, conversationId),
+    );
+    final targetId = matched.isNotEmpty ? matched.first.id : conversationId;
+
+    final ok = await _gatewayService.deleteSession(key: targetId);
+    if (!ok) {
+      _errorMessage = _gatewayService.errorMessage ?? '删除会话失败';
+      notifyListeners();
+      return false;
+    }
+
+    _conversations.removeWhere((c) => _isSameSessionKey(c.id, targetId));
+    _errorMessage = null;
+
+    if (_isSameSessionKey(_currentSessionKey, targetId)) {
+      final fallback = _conversations.isNotEmpty
+          ? _conversations.first
+          : Conversation(id: 'main', title: '主对话', lastUpdated: DateTime.now());
+      _currentSessionKey = fallback.id;
+      _currentConversationId = fallback.id;
+      _messages.clear();
+      _streamingContent = '';
+      _pendingRuns.clear();
+      _currentRunId = null;
+      notifyListeners();
+      unawaited(_loadChatHistory());
+    } else {
+      notifyListeners();
+    }
+
+    unawaited(_loadConversations());
+    return true;
   }
 
   void clearMessages() {

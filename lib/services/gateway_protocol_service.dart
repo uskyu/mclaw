@@ -145,6 +145,7 @@ class GatewayProtocolService {
   GatewayConnectionState _currentState = GatewayConnectionState.disconnected;
   String? _lastError;
   String? _deviceToken;
+  Set<String> _grantedScopes = <String>{};
   int _tickIntervalMs = 15000;
 
   Stream<GatewayConnectionState> get stateStream => _stateController.stream;
@@ -155,6 +156,7 @@ class GatewayProtocolService {
   GatewayConnectionState get currentState => _currentState;
   String? get lastError => _lastError;
   String? get deviceToken => _deviceToken;
+  Set<String> get grantedScopes => _grantedScopes;
   bool get isConnected => _currentState == GatewayConnectionState.connected;
   int get tickIntervalMs => _tickIntervalMs;
 
@@ -236,7 +238,7 @@ class GatewayProtocolService {
           'mode': mode,
         },
         'role': 'operator',
-        'scopes': ['operator.read', 'operator.write'],
+        'scopes': ['operator.read', 'operator.write', 'operator.admin'],
         'auth': {
           'token': token,
           if (deviceToken != null && deviceToken.isNotEmpty)
@@ -252,6 +254,7 @@ class GatewayProtocolService {
         final payload = response['payload'] as Map<String, dynamic>?;
         if (payload?['type'] == 'hello-ok') {
           final grantedScopes = _extractGrantedScopes(payload);
+          _grantedScopes = grantedScopes;
           if (grantedScopes.isNotEmpty &&
               !grantedScopes.contains('operator.write')) {
             _lastError =
@@ -395,6 +398,51 @@ class GatewayProtocolService {
     } catch (e) {
       print('sessions.list 错误: $e');
       return [];
+    }
+  }
+
+  /// 重命名会话（写入 sessions.label）
+  Future<bool> sessionsPatchLabel({
+    required String key,
+    required String label,
+  }) async {
+    final params = <String, dynamic>{'key': key, 'label': label};
+
+    try {
+      final response = await _sendRequest(
+        'sessions.patch',
+        params,
+        null,
+        timeoutSeconds: 35,
+      );
+      return response['ok'] == true;
+    } catch (e) {
+      print('sessions.patch 错误: $e');
+      return false;
+    }
+  }
+
+  /// 删除会话（主会话不可删）
+  Future<bool> sessionsDelete({
+    required String key,
+    bool deleteTranscript = true,
+  }) async {
+    final params = <String, dynamic>{
+      'key': key,
+      'deleteTranscript': deleteTranscript,
+    };
+
+    try {
+      final response = await _sendRequest(
+        'sessions.delete',
+        params,
+        null,
+        timeoutSeconds: 40,
+      );
+      return response['ok'] == true;
+    } catch (e) {
+      print('sessions.delete 错误: $e');
+      return false;
     }
   }
 
@@ -548,6 +596,7 @@ class GatewayProtocolService {
     await _channel?.sink.close();
     _channel = null;
     _deviceToken = null;
+    _grantedScopes = <String>{};
     _pendingRequests.clear();
     _updateState(GatewayConnectionState.disconnected);
   }

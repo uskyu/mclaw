@@ -2,17 +2,28 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 
+class OutlineItem {
+  final int messageIndex;
+  final String title;
+  final String subtitle;
+
+  const OutlineItem({
+    required this.messageIndex,
+    required this.title,
+    required this.subtitle,
+  });
+}
+
 class OutlineDrawer extends StatelessWidget {
-  const OutlineDrawer({super.key});
+  final List<OutlineItem> items;
+  final ValueChanged<OutlineItem>? onSelected;
+
+  const OutlineDrawer({super.key, this.items = const [], this.onSelected});
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final outlineItems = [
-      l10n.generalAssistantDesc,
-      l10n.codeAssistantDesc,
-      l10n.writingAssistantDesc,
-    ];
+    final outlineItems = items;
 
     return Container(
       decoration: BoxDecoration(
@@ -52,22 +63,56 @@ class OutlineDrawer extends StatelessWidget {
               ),
             ),
             const Divider(),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: outlineItems.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                return ListTile(
-                  leading: const Icon(Icons.circle, size: 8, color: AppTheme.appleBlue),
-                  title: Text(
-                    outlineItems[index],
-                    style: const TextStyle(fontSize: 15),
+            if (outlineItems.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  '暂无可跳转的大纲',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
-                  onTap: () => Navigator.pop(context),
-                );
-              },
-            ),
+                ),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: outlineItems.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final item = outlineItems[index];
+                    return ListTile(
+                      leading: const Icon(
+                        Icons.short_text_rounded,
+                        size: 18,
+                        color: AppTheme.appleBlue,
+                      ),
+                      title: Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        item.subtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        onSelected?.call(item);
+                      },
+                    );
+                  },
+                ),
+              ),
             const SizedBox(height: 16),
           ],
         ),
@@ -91,7 +136,7 @@ class ContextDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -249,7 +294,9 @@ class SubAgentDrawer extends StatelessWidget {
                               minHeight: 4,
                               backgroundColor: AppTheme.appleLightGray,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                isComplete ? AppTheme.appleGreen : AppTheme.appleBlue,
+                                isComplete
+                                    ? AppTheme.appleGreen
+                                    : AppTheme.appleBlue,
                               ),
                             ),
                           ),
@@ -266,7 +313,10 @@ class SubAgentDrawer extends StatelessWidget {
                     ),
                   ),
                   trailing: isComplete
-                      ? const Icon(Icons.check_circle, color: AppTheme.appleGreen)
+                      ? const Icon(
+                          Icons.check_circle,
+                          color: AppTheme.appleGreen,
+                        )
                       : null,
                 );
               },

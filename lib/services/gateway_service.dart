@@ -36,6 +36,8 @@ class GatewayService extends ChangeNotifier {
   ConnectionStatus get status => _status;
   String? get errorMessage => _errorMessage;
   bool get isConnected => _status == ConnectionStatus.connected;
+  bool get canManageSessions =>
+      _protocolService.grantedScopes.contains('operator.admin');
   Server? get currentServer => _currentServer;
   String? get currentRunId => _currentRunId;
   int get tickIntervalMs => _protocolService.tickIntervalMs;
@@ -223,6 +225,38 @@ class GatewayService extends ChangeNotifier {
       includeDerivedTitles: includeDerivedTitles,
       includeLastMessage: includeLastMessage,
     );
+  }
+
+  /// 重命名会话
+  Future<bool> renameSessionLabel({
+    required String key,
+    required String label,
+  }) async {
+    if (!isConnected) return false;
+    final ok = await _protocolService.sessionsPatchLabel(
+      key: key,
+      label: label,
+    );
+    if (!ok) {
+      _errorMessage = _protocolService.lastError ?? '重命名会话失败';
+    }
+    return ok;
+  }
+
+  /// 删除会话
+  Future<bool> deleteSession({
+    required String key,
+    bool deleteTranscript = true,
+  }) async {
+    if (!isConnected) return false;
+    final ok = await _protocolService.sessionsDelete(
+      key: key,
+      deleteTranscript: deleteTranscript,
+    );
+    if (!ok) {
+      _errorMessage = _protocolService.lastError ?? '删除会话失败';
+    }
+    return ok;
   }
 
   /// 健康检查

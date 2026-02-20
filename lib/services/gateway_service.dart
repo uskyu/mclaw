@@ -192,12 +192,17 @@ class GatewayService extends ChangeNotifier {
   Future<ChatSendResult> sendMessage(
     String message, {
     String sessionKey = 'main',
+    List<Map<String, dynamic>>? attachments,
   }) async {
     if (!isConnected) {
       return ChatSendResult(errorMessage: '未连接到服务器');
     }
 
-    final result = await _protocolService.chatSend(message, sessionKey);
+    final result = await _protocolService.chatSend(
+      message,
+      sessionKey,
+      attachments: attachments,
+    );
     if (result.isSuccess && result.response != null) {
       _currentRunId = result.response!.runId;
     }

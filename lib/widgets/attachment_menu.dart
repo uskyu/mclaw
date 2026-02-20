@@ -3,7 +3,16 @@ import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 
 class AttachmentMenu extends StatelessWidget {
-  const AttachmentMenu({super.key});
+  final VoidCallback onTakePicture;
+  final VoidCallback onPickPhoto;
+  final VoidCallback onPickFile;
+
+  const AttachmentMenu({
+    super.key,
+    required this.onTakePicture,
+    required this.onPickPhoto,
+    required this.onPickFile,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +32,7 @@ class AttachmentMenu extends StatelessWidget {
                   context,
                   Icons.camera_alt_outlined,
                   l10n.takePicture,
-                  () {},
+                  onTakePicture,
                 ),
               ),
               const SizedBox(width: 12),
@@ -32,7 +41,7 @@ class AttachmentMenu extends StatelessWidget {
                   context,
                   Icons.photo_outlined,
                   l10n.photo,
-                  () {},
+                  onPickPhoto,
                 ),
               ),
               const SizedBox(width: 12),
@@ -41,7 +50,7 @@ class AttachmentMenu extends StatelessWidget {
                   context,
                   Icons.insert_drive_file_outlined,
                   l10n.file,
-                  () {},
+                  onPickFile,
                 ),
               ),
             ],

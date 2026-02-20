@@ -436,6 +436,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     }
                   }
 
+                  if (provider.isHistoryLoading && provider.messages.isEmpty) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
                   if (provider.messages.isEmpty) {
                     return _buildEmptyState(l10n);
                   }
@@ -522,8 +526,8 @@ class _ChatScreenState extends State<ChatScreen> {
           Consumer<ChatProvider>(
             builder: (context, provider, child) {
               return InputToolbar(
-                onSend: (text) {
-                  provider.sendMessage(text);
+                onSend: (text, attachments) async {
+                  await provider.sendMessage(text, attachments: attachments);
                   _runSafeScrollAction(() => _scrollToBottom(animated: true));
                   Future<void>.delayed(const Duration(milliseconds: 120), () {
                     if (!mounted) {

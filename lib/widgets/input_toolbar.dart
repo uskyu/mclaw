@@ -1,11 +1,19 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as p;
 import '../l10n/app_localizations.dart';
+import '../models/chat_attachment.dart';
 import '../theme/app_theme.dart';
 import 'attachment_menu.dart';
 import 'right_drawers.dart';
 
 class InputToolbar extends StatefulWidget {
-  final Function(String) onSend;
+  final Future<void> Function(String, List<ChatAttachment>) onSend;
   final double contextUsage;
   final bool isConnected;
   final List<OutlineItem> outlineItems;
@@ -26,6 +34,8 @@ class InputToolbar extends StatefulWidget {
 
 class _InputToolbarState extends State<InputToolbar>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  static const int _maxAttachmentBytes = 4_800_000;
+  static const int _maxAttachmentCount = 3;
   static const List<MapEntry<String, String>> _quickCommands = [
     MapEntry('/status', '状态'),
     MapEntry('/new', '重置当前会话'),
@@ -38,6 +48,8 @@ class _InputToolbarState extends State<InputToolbar>
 
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  final ImagePicker _imagePicker = ImagePicker();
+  final List<ChatAttachment> _pendingAttachments = [];
   bool _isAttachmentExpanded = false;
   late AnimationController _animationController;
   late Animation<double> _rotationAnimation;
@@ -101,6 +113,156 @@ class _InputToolbarState extends State<InputToolbar>
       } else {
         _animationController.reverse();
       }
+    });
+  }
+
+  void _showToast(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  String _mimeFromFileName(String fileName) {
+    final ext = p.extension(fileName).toLowerCase().replaceFirst('.', '');
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'gif':
+        return 'image/gif';
+      case 'bmp':
+        return 'image/bmp';
+      case 'heic':
+      case 'heif':
+        return 'image/heic';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  Future<void> _tryAddAttachmentFromPath(String path) async {
+    final file = File(path);
+    if (!await file.exists()) {
+      _showToast('文件不存在');
+      return;
+    }
+
+    final fileName = p.basename(path);
+    final mimeType = _mimeFromFileName(fileName);
+    if (!mimeType.startsWith('image/')) {
+      _showToast('当前版本仅支持图片附件');
+      return;
+    }
+
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) {
+      _showToast('文件为空，无法发送');
+      return;
+    }
+    if (bytes.length > _maxAttachmentBytes) {
+      _showToast('图片过大，请选择 5MB 以内图片');
+      return;
+    }
+
+    if (_pendingAttachments.length >= _maxAttachmentCount) {
+      _showToast('最多附加 $_maxAttachmentCount 张图片');
+      return;
+    }
+
+    final attachment = ChatAttachment(
+      fileName: fileName,
+      mimeType: mimeType,
+      base64Data: base64Encode(bytes),
+      bytes: bytes.length,
+      localPath: path,
+    );
+
+    setState(() {
+      _pendingAttachments.add(attachment);
+      _isAttachmentExpanded = false;
+      _animationController.reverse();
+    });
+  }
+
+  Future<void> _pickFromCamera() async {
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 82,
+        maxWidth: 1800,
+        maxHeight: 1800,
+      );
+      if (picked == null) {
+        return;
+      }
+      await _tryAddAttachmentFromPath(picked.path);
+    } catch (e) {
+      _showToast('拍照失败: $e');
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 86,
+        maxWidth: 1800,
+        maxHeight: 1800,
+      );
+      if (picked == null) {
+        return;
+      }
+      await _tryAddAttachmentFromPath(picked.path);
+    } catch (e) {
+      _showToast('选择相册失败: $e');
+    }
+  }
+
+  Future<void> _pickFromFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: false,
+        type: FileType.custom,
+        allowedExtensions: const [
+          'jpg',
+          'jpeg',
+          'png',
+          'webp',
+          'gif',
+          'bmp',
+          'heic',
+          'heif',
+        ],
+      );
+      if (result == null || result.files.isEmpty) {
+        return;
+      }
+
+      final path = result.files.single.path;
+      if (path == null || path.isEmpty) {
+        _showToast('读取文件失败');
+        return;
+      }
+
+      await _tryAddAttachmentFromPath(path);
+    } catch (e) {
+      _showToast('选择文件失败: $e');
+    }
+  }
+
+  void _removeAttachmentAt(int index) {
+    if (index < 0 || index >= _pendingAttachments.length) {
+      return;
+    }
+    setState(() {
+      _pendingAttachments.removeAt(index);
     });
   }
 
@@ -229,7 +391,7 @@ class _InputToolbarState extends State<InputToolbar>
                         ),
                         onTap: () {
                           Navigator.pop(context);
-                          _sendMessage(entry.key);
+                          _sendMessage(entry.key, includeAttachments: false);
                         },
                       );
                     },
@@ -280,6 +442,68 @@ class _InputToolbarState extends State<InputToolbar>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (_pendingAttachments.isNotEmpty)
+              SizedBox(
+                height: 42,
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _pendingAttachments.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final item = _pendingAttachments[index];
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? AppTheme.darkSurface
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : AppTheme.appleLightGray,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.image_outlined,
+                            size: 14,
+                            color: AppTheme.appleBlue,
+                          ),
+                          const SizedBox(width: 6),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 120),
+                            child: Text(
+                              item.fileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          InkWell(
+                            onTap: () => _removeAttachmentAt(index),
+                            child: const Icon(
+                              Icons.close,
+                              size: 14,
+                              color: AppTheme.appleGray,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
             // 输入框
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
@@ -344,7 +568,17 @@ class _InputToolbarState extends State<InputToolbar>
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
               child: (_isAttachmentExpanded && !isKeyboardVisible)
-                  ? const AttachmentMenu()
+                  ? AttachmentMenu(
+                      onTakePicture: () {
+                        unawaited(_pickFromCamera());
+                      },
+                      onPickPhoto: () {
+                        unawaited(_pickFromGallery());
+                      },
+                      onPickFile: () {
+                        unawaited(_pickFromFile());
+                      },
+                    )
                   : const SizedBox.shrink(),
             ),
           ],
@@ -476,21 +710,33 @@ class _InputToolbarState extends State<InputToolbar>
     );
   }
 
-  void _sendMessage(String text) {
-    if (text.trim().isNotEmpty) {
-      if (!widget.isConnected) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('未连接到服务器，请先配置服务器'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-        return;
-      }
+  void _sendMessage(String text, {bool includeAttachments = true}) {
+    final normalized = text.trim();
+    final attachments = includeAttachments
+        ? List<ChatAttachment>.from(_pendingAttachments)
+        : <ChatAttachment>[];
 
-      FocusManager.instance.primaryFocus?.unfocus();
-      widget.onSend(text.trim());
-      _controller.clear();
+    if (normalized.isEmpty && attachments.isEmpty) {
+      return;
+    }
+
+    if (!widget.isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('未连接到服务器，请先配置服务器'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    unawaited(widget.onSend(normalized, attachments));
+    _controller.clear();
+    if (_pendingAttachments.isNotEmpty) {
+      setState(() {
+        _pendingAttachments.clear();
+      });
     }
   }
 }

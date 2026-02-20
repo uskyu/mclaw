@@ -1,6 +1,3 @@
-import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
-
 enum MessageType { user, ai }
 
 class Message {
@@ -9,6 +6,7 @@ class Message {
   final MessageType type;
   final DateTime timestamp;
   final bool isLoading;
+  final List<String> imagePaths;
 
   Message({
     required this.id,
@@ -16,6 +14,7 @@ class Message {
     required this.type,
     required this.timestamp,
     this.isLoading = false,
+    this.imagePaths = const [],
   });
 }
 

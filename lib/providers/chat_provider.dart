@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../models/chat_attachment.dart';
 import '../models/message.dart';
 import '../models/agent.dart';
 import '../models/server.dart';
@@ -19,8 +20,10 @@ class ChatProvider with ChangeNotifier {
 
   Agent _currentAgent = Agent.defaultAgents.first;
   String _currentSessionKey = 'main';
+  String? _currentServerId;
 
   bool _isConnecting = false;
+  bool _isHistoryLoading = false;
   String? _errorMessage;
 
   double _contextUsage = 0.0;
@@ -50,6 +53,7 @@ class ChatProvider with ChangeNotifier {
   String get currentConversationId => _currentConversationId;
   bool get isConnected => _gatewayService.isConnected;
   bool get isConnecting => _isConnecting;
+  bool get isHistoryLoading => _isHistoryLoading;
   String? get errorMessage => _errorMessage;
   double get contextUsage => _contextUsage;
   int get totalTokens => _totalTokens;
@@ -122,7 +126,9 @@ class ChatProvider with ChangeNotifier {
       final success = await _gatewayService.connect(server);
 
       if (success) {
+        _currentServerId = server.id;
         await _loadConversations();
+        await _restoreLastSessionForCurrentServer();
         await _loadChatHistory();
       } else {
         _errorMessage = _gatewayService.errorMessage ?? '连接失败';
@@ -144,6 +150,7 @@ class ChatProvider with ChangeNotifier {
     _messages.clear();
     _pendingRuns.clear();
     _currentRunId = null;
+    _currentServerId = null;
     _conversationRefreshTimer?.cancel();
     notifyListeners();
   }
@@ -152,8 +159,12 @@ class ChatProvider with ChangeNotifier {
     await _loadConversations();
   }
 
-  Future<void> sendMessage(String content) async {
-    if (content.trim().isEmpty) return;
+  Future<void> sendMessage(
+    String content, {
+    List<ChatAttachment> attachments = const [],
+  }) async {
+    final text = content.trim();
+    if (text.isEmpty && attachments.isEmpty) return;
 
     if (!_gatewayService.isConnected) {
       _errorMessage = '未连接到服务器';
@@ -163,12 +174,16 @@ class ChatProvider with ChangeNotifier {
 
     final userMessage = Message(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      content: content.trim(),
+      content: text,
       type: MessageType.user,
       timestamp: DateTime.now(),
+      imagePaths: attachments
+          .where((a) => a.localPath != null && a.localPath!.isNotEmpty)
+          .map((a) => a.localPath!)
+          .toList(),
     );
     _messages.add(userMessage);
-    _touchConversationOnUserMessage(content.trim());
+    _touchConversationOnUserMessage(text.isNotEmpty ? text : '附件消息');
     notifyListeners();
 
     // 添加加载中消息
@@ -186,8 +201,9 @@ class ChatProvider with ChangeNotifier {
 
     try {
       final result = await _gatewayService.sendMessage(
-        content.trim(),
+        text,
         sessionKey: _currentSessionKey,
+        attachments: attachments.map((a) => a.toRpcMap()).toList(),
       );
 
       if (result.isSuccess && result.response != null) {
@@ -491,6 +507,43 @@ class ChatProvider with ChangeNotifier {
     return normalized;
   }
 
+  Future<void> _persistCurrentSessionForServer() async {
+    final serverId = _currentServerId;
+    if (serverId == null || serverId.trim().isEmpty) {
+      return;
+    }
+    await SecureStorageService.saveLastSessionForServer(
+      serverId,
+      _currentSessionKey,
+    );
+  }
+
+  Future<void> _restoreLastSessionForCurrentServer() async {
+    final serverId = _currentServerId;
+    if (serverId == null || serverId.trim().isEmpty) {
+      return;
+    }
+
+    final lastSession = await SecureStorageService.loadLastSessionForServer(
+      serverId,
+    );
+    if (lastSession == null || lastSession.trim().isEmpty) {
+      return;
+    }
+
+    final matched = _conversations.where(
+      (c) => _isSameSessionKey(c.id, lastSession),
+    );
+    if (matched.isNotEmpty) {
+      _currentSessionKey = matched.first.id;
+      _currentConversationId = matched.first.id;
+      return;
+    }
+
+    _currentSessionKey = lastSession.trim();
+    _currentConversationId = lastSession.trim();
+  }
+
   bool _isSameSessionKey(String a, String b) {
     return _normalizeSessionKey(a) == _normalizeSessionKey(b);
   }
@@ -773,6 +826,8 @@ class ChatProvider with ChangeNotifier {
   }
 
   Future<void> _loadChatHistory() async {
+    _isHistoryLoading = true;
+    notifyListeners();
     try {
       final history = await _gatewayService.getChatHistory(
         sessionKey: _currentSessionKey,
@@ -851,6 +906,9 @@ class ChatProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print('加载历史消息失败: $e');
+    } finally {
+      _isHistoryLoading = false;
+      notifyListeners();
     }
   }
 
@@ -873,6 +931,8 @@ class ChatProvider with ChangeNotifier {
     _currentRunId = null;
     _errorMessage = null;
     notifyListeners();
+
+    unawaited(_persistCurrentSessionForServer());
 
     unawaited(_loadChatHistory());
   }
@@ -1009,6 +1069,7 @@ class ChatProvider with ChangeNotifier {
       _pendingRuns.clear();
       _currentRunId = null;
       notifyListeners();
+      unawaited(_persistCurrentSessionForServer());
       unawaited(_loadChatHistory());
     } else {
       notifyListeners();

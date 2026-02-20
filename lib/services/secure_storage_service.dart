@@ -13,6 +13,7 @@ class SecureStorageService {
   static const _serversKey = 'servers';
   static const _activeServerIdKey = 'active_server_id';
   static const _conversationNotesKey = 'conversation_notes';
+  static const _lastSessionByServerKey = 'last_session_by_server';
 
   /// 保存服务器列表
   static Future<void> saveServers(List<Server> servers) async {
@@ -56,6 +57,57 @@ class SecureStorageService {
   /// 读取当前活跃的服务器 ID
   static Future<String?> loadActiveServerId() async {
     return await _storage.read(key: _activeServerIdKey);
+  }
+
+  static Future<void> saveLastSessionForServer(
+    String serverId,
+    String sessionKey,
+  ) async {
+    if (serverId.trim().isEmpty || sessionKey.trim().isEmpty) {
+      return;
+    }
+
+    final existing = await loadLastSessionMap();
+    existing[serverId.trim()] = sessionKey.trim();
+    await _storage.write(
+      key: _lastSessionByServerKey,
+      value: jsonEncode(existing),
+    );
+  }
+
+  static Future<Map<String, String>> loadLastSessionMap() async {
+    try {
+      final raw = await _storage.read(key: _lastSessionByServerKey);
+      if (raw == null || raw.trim().isEmpty) {
+        return {};
+      }
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return {};
+      }
+
+      final result = <String, String>{};
+      decoded.forEach((key, value) {
+        final k = key.toString().trim();
+        final v = value.toString().trim();
+        if (k.isNotEmpty && v.isNotEmpty) {
+          result[k] = v;
+        }
+      });
+      return result;
+    } catch (e) {
+      print('读取上次会话映射失败: $e');
+      return {};
+    }
+  }
+
+  static Future<String?> loadLastSessionForServer(String serverId) async {
+    if (serverId.trim().isEmpty) {
+      return null;
+    }
+    final map = await loadLastSessionMap();
+    return map[serverId.trim()];
   }
 
   /// 保存会话本地备注（key: normalized session key）

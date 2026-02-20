@@ -344,9 +344,9 @@ class _InputToolbarState extends State<InputToolbar>
                 children: [
                   _buildQuickCommandButton(),
                   const SizedBox(width: 10),
-                  _buildContextButton(),
-                  const SizedBox(width: 10),
                   _buildOutlineButton(),
+                  const SizedBox(width: 10),
+                  _buildContextButton(),
                   const Spacer(),
                   _buildAnimatedAttachmentButton(),
                 ],
@@ -517,6 +517,8 @@ class _InputToolbarState extends State<InputToolbar>
         );
         return;
       }
+
+      FocusManager.instance.primaryFocus?.unfocus();
       widget.onSend(text.trim());
       _controller.clear();
     }

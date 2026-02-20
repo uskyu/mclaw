@@ -15,7 +15,7 @@ class MessageBubble extends StatelessWidget {
     final isUser = message.type == MessageType.user;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final hasWideMarkdown = _needsHorizontalMarkdownScroll(message.content);
-    final maxBubbleWidth = MediaQuery.of(context).size.width * 0.78;
+    final maxBubbleWidth = MediaQuery.of(context).size.width * 0.84;
     final timeText = MaterialLocalizations.of(context).formatTimeOfDay(
       TimeOfDay.fromDateTime(message.timestamp),
       alwaysUse24HourFormat: true,

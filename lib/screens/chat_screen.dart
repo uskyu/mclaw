@@ -524,6 +524,15 @@ class _ChatScreenState extends State<ChatScreen> {
               return InputToolbar(
                 onSend: (text) {
                   provider.sendMessage(text);
+                  _runSafeScrollAction(() => _scrollToBottom(animated: true));
+                  Future<void>.delayed(const Duration(milliseconds: 120), () {
+                    if (!mounted) {
+                      return;
+                    }
+                    _runSafeScrollAction(
+                      () => _scrollToBottom(animated: false),
+                    );
+                  });
                 },
                 contextUsage: provider.contextUsage,
                 isConnected: provider.isConnected,

@@ -205,9 +205,10 @@ class GatewayService extends ChangeNotifier {
   /// 获取聊天历史
   Future<List<Map<String, dynamic>>> getChatHistory({
     String sessionKey = 'main',
+    int limit = 80,
   }) async {
     if (!isConnected) return [];
-    return await _protocolService.chatHistory(sessionKey);
+    return await _protocolService.chatHistory(sessionKey, limit: limit);
   }
 
   /// 获取会话列表

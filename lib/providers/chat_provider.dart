@@ -8,6 +8,8 @@ import '../services/gateway_protocol_service.dart';
 import '../services/secure_storage_service.dart';
 
 class ChatProvider with ChangeNotifier {
+  static const int _historyFetchLimit = 80;
+
   final GatewayService _gatewayService;
   StreamSubscription? _chatSubscription;
   StreamSubscription? _agentSubscription;
@@ -706,6 +708,7 @@ class ChatProvider with ChangeNotifier {
     try {
       final history = await _gatewayService.getChatHistory(
         sessionKey: _currentSessionKey,
+        limit: _historyFetchLimit,
       );
 
       _messages.clear();

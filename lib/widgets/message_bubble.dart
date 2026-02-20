@@ -88,7 +88,7 @@ class MessageBubble extends StatelessWidget {
   Widget _buildMarkdown(BuildContext context, bool isUser) {
     return MarkdownBody(
       data: message.content,
-      selectable: true,
+      selectable: false,
       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
         p: TextStyle(
           fontSize: 16,

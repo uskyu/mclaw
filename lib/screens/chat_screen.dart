@@ -26,6 +26,8 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _scrollButtonsTimer;
   bool _showScrollButtons = false;
   int _lastMessageCount = 0;
+  bool _lastConnected = false;
+  bool _isProgrammaticScroll = false;
 
   @override
   void dispose() {
@@ -51,11 +53,24 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   bool _onScrollNotification(ScrollNotification notification) {
-    if (notification is ScrollStartNotification ||
-        notification is ScrollUpdateNotification ||
-        notification is OverscrollNotification ||
-        (notification is UserScrollNotification &&
-            notification.direction != ScrollDirection.idle)) {
+    if (_isProgrammaticScroll) {
+      return false;
+    }
+
+    final isUserStart =
+        notification is ScrollStartNotification &&
+        notification.dragDetails != null;
+    final isUserUpdate =
+        notification is ScrollUpdateNotification &&
+        notification.dragDetails != null;
+    final isUserOverscroll =
+        notification is OverscrollNotification &&
+        notification.dragDetails != null;
+    final isUserScroll =
+        notification is UserScrollNotification &&
+        notification.direction != ScrollDirection.idle;
+
+    if (isUserStart || isUserUpdate || isUserOverscroll || isUserScroll) {
       _setScrollButtonsVisible(true);
       _scheduleHideScrollButtons();
       return false;
@@ -81,10 +96,60 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Future<void> _scrollToBottom() async {
-    if (!_scrollController.hasClients) return;
-    final target = _scrollController.position.maxScrollExtent;
-    await _smoothScrollTo(target);
+  Future<void> _scrollToBottom({bool animated = true}) async {
+    if (!_scrollController.hasClients || !mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!_scrollController.hasClients || !mounted) return;
+
+    final position = _scrollController.position;
+    if (!position.hasContentDimensions) {
+      return;
+    }
+
+    final target = position.maxScrollExtent;
+    final distance = (target - position.pixels).abs();
+    if (distance < 1) {
+      return;
+    }
+
+    if (!animated) {
+      _isProgrammaticScroll = true;
+      try {
+        _scrollController.jumpTo(target);
+      } finally {
+        _isProgrammaticScroll = false;
+      }
+      return;
+    }
+
+    if (distance > 3500) {
+      final nearBottom = (target - 480)
+          .clamp(position.minScrollExtent, position.maxScrollExtent)
+          .toDouble();
+      _isProgrammaticScroll = true;
+      try {
+        _scrollController.jumpTo(nearBottom);
+      } finally {
+        _isProgrammaticScroll = false;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+      if (!_scrollController.hasClients || !mounted) return;
+    }
+
+    await _smoothScrollTo(_scrollController.position.maxScrollExtent);
+
+    if (!_scrollController.hasClients || !mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!_scrollController.hasClients || !mounted) return;
+    final finalTarget = _scrollController.position.maxScrollExtent;
+    if ((_scrollController.position.pixels - finalTarget).abs() > 1) {
+      _isProgrammaticScroll = true;
+      try {
+        _scrollController.jumpTo(finalTarget);
+      } finally {
+        _isProgrammaticScroll = false;
+      }
+    }
   }
 
   Future<void> _scrollToTop() async {
@@ -93,8 +158,11 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _smoothScrollTo(double target) async {
-    if (!_scrollController.hasClients) return;
+    if (!_scrollController.hasClients || !mounted) return;
     final position = _scrollController.position;
+    if (!position.hasContentDimensions) {
+      return;
+    }
     final clamped = target
         .clamp(position.minScrollExtent, position.maxScrollExtent)
         .toDouble();
@@ -103,12 +171,42 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    final durationMs = (180 + (distance * 0.08)).clamp(180, 520).round();
-    await _scrollController.animateTo(
-      clamped,
-      duration: Duration(milliseconds: durationMs),
-      curve: Curves.easeOutCubic,
-    );
+    final durationMs = (160 + (distance * 0.05)).clamp(160, 320).round();
+    try {
+      _isProgrammaticScroll = true;
+      await _scrollController.animateTo(
+        clamped,
+        duration: Duration(milliseconds: durationMs),
+        curve: Curves.easeOutCubic,
+      );
+    } catch (_) {
+      if (_scrollController.hasClients && mounted) {
+        final fallback = _scrollController.position.maxScrollExtent;
+        _scrollController.jumpTo(
+          fallback
+              .clamp(
+                _scrollController.position.minScrollExtent,
+                _scrollController.position.maxScrollExtent,
+              )
+              .toDouble(),
+        );
+      }
+    } finally {
+      _isProgrammaticScroll = false;
+    }
+  }
+
+  void _runSafeScrollAction(Future<void> Function() action) {
+    try {
+      final future = action();
+      unawaited(
+        future.catchError((error, stackTrace) {
+          debugPrint('scroll action failed: $error');
+        }),
+      );
+    } catch (error) {
+      debugPrint('scroll action crashed: $error');
+    }
   }
 
   double? _offsetForMessageIndex(int index) {
@@ -252,6 +350,17 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Consumer<ChatProvider>(
               builder: (context, provider, child) {
                 final messageCount = provider.messages.length;
+                if (provider.isConnected != _lastConnected) {
+                  _lastConnected = provider.isConnected;
+                  if (_lastConnected && messageCount > 0) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _runSafeScrollAction(
+                        () => _scrollToBottom(animated: false),
+                      );
+                    });
+                  }
+                }
+
                 _syncMessageKeys(messageCount);
                 if (messageCount != _lastMessageCount) {
                   final shouldAutoScroll =
@@ -259,7 +368,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   _lastMessageCount = messageCount;
                   if (shouldAutoScroll) {
                     WidgetsBinding.instance.addPostFrameCallback(
-                      (_) => unawaited(_scrollToBottom()),
+                      (_) => _runSafeScrollAction(
+                        () => _scrollToBottom(animated: false),
+                      ),
                     );
                   }
                 }
@@ -302,14 +413,15 @@ class _ChatScreenState extends State<ChatScreen> {
                                 _buildScrollButton(
                                   icon: Icons.vertical_align_top,
                                   tooltip: '顶部',
-                                  onTap: () => unawaited(_scrollToTop()),
+                                  onTap: () =>
+                                      _runSafeScrollAction(_scrollToTop),
                                 ),
                                 const SizedBox(height: 8),
                                 _buildScrollButton(
                                   icon: Icons.keyboard_arrow_up,
                                   tooltip: '上一对话',
-                                  onTap: () => unawaited(
-                                    _jumpConversation(
+                                  onTap: () => _runSafeScrollAction(
+                                    () => _jumpConversation(
                                       messages: provider.messages,
                                       forward: false,
                                     ),
@@ -319,8 +431,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                 _buildScrollButton(
                                   icon: Icons.keyboard_arrow_down,
                                   tooltip: '下一对话',
-                                  onTap: () => unawaited(
-                                    _jumpConversation(
+                                  onTap: () => _runSafeScrollAction(
+                                    () => _jumpConversation(
                                       messages: provider.messages,
                                       forward: true,
                                     ),
@@ -330,7 +442,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                 _buildScrollButton(
                                   icon: Icons.vertical_align_bottom,
                                   tooltip: '底部',
-                                  onTap: () => unawaited(_scrollToBottom()),
+                                  onTap: () => _runSafeScrollAction(
+                                    () => _scrollToBottom(animated: true),
+                                  ),
                                 ),
                               ],
                             ),

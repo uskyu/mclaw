@@ -334,8 +334,11 @@ class GatewayProtocolService {
   }
 
   /// 获取聊天历史
-  Future<List<Map<String, dynamic>>> chatHistory(String sessionKey) async {
-    final params = {'sessionKey': sessionKey};
+  Future<List<Map<String, dynamic>>> chatHistory(
+    String sessionKey, {
+    int limit = 80,
+  }) async {
+    final params = {'sessionKey': sessionKey, 'limit': limit};
 
     try {
       final response = await _sendRequest(
@@ -479,9 +482,15 @@ class GatewayProtocolService {
   void _handleMessage(dynamic data) {
     try {
       final json = jsonDecode(data as String) as Map<String, dynamic>;
-      print(
-        '收到消息: ${json['type']} ${json['method'] ?? json['event'] ?? json['id'] ?? ''}',
-      );
+      final msgType = json['type']?.toString() ?? '';
+      final event = json['event']?.toString() ?? '';
+      final isNoisyTick =
+          msgType == 'event' && (event == 'tick' || event == 'health');
+      if (!isNoisyTick) {
+        print(
+          '收到消息: $msgType ${json['method'] ?? json['event'] ?? json['id'] ?? ''}',
+        );
+      }
 
       final message = GatewayMessage.fromJson(json);
 
@@ -497,7 +506,7 @@ class GatewayProtocolService {
           }
           completer.complete(json);
         } else {
-          print('未找到请求: ${message.id}, pending: ${_pendingRequests.keys}');
+          // 断线重连窗口期可能收到滞后响应，忽略即可。
         }
       }
 

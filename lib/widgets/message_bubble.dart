@@ -19,8 +19,6 @@ class MessageBubble extends StatelessWidget {
     final isUser = message.type == MessageType.user;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final hasTextContent = message.content.trim().isNotEmpty;
-    final hasWideMarkdown =
-        hasTextContent && _needsHorizontalMarkdownScroll(message.content);
     final maxBubbleWidth = MediaQuery.of(context).size.width * 0.84;
     final timeText = MaterialLocalizations.of(context).formatTimeOfDay(
       TimeOfDay.fromDateTime(message.timestamp),
@@ -141,22 +139,7 @@ class MessageBubble extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                            if (hasWideMarkdown)
-                              LayoutBuilder(
-                                builder: (context, constraints) {
-                                  return SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: ConstrainedBox(
-                                      constraints: BoxConstraints(
-                                        minWidth: constraints.maxWidth,
-                                      ),
-                                      child: _buildMarkdown(context, isUser),
-                                    ),
-                                  );
-                                },
-                              )
-                            else
-                              _buildMarkdown(context, isUser),
+                            _buildMarkdown(context, isUser),
                           ],
                         ),
                 ),
@@ -180,8 +163,9 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildMarkdown(BuildContext context, bool isUser) {
+    final markdownText = _normalizeMarkdownForRendering(message.content);
     return MarkdownBody(
-      data: message.content,
+      data: markdownText,
       selectable: false,
       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
         p: TextStyle(
@@ -207,8 +191,26 @@ class MessageBubble extends StatelessWidget {
               ? Colors.white70
               : Theme.of(context).textTheme.bodyMedium?.color,
         ),
+        blockquotePadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 2,
+        ),
+        tableColumnWidth: const IntrinsicColumnWidth(),
+        tableScrollbarThumbVisibility: true,
+        tableCellsPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 8,
+        ),
       ),
     );
+  }
+
+  String _normalizeMarkdownForRendering(String text) {
+    final normalized = text
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF]'), '');
+    return normalized.replaceAll(RegExp(r'\n{3,}'), '\n\n').trimRight();
   }
 
   Widget _buildImageAttachmentCard(
@@ -258,22 +260,6 @@ class MessageBubble extends StatelessWidget {
         }).toList(),
       ),
     );
-  }
-
-  bool _containsMarkdownTable(String text) {
-    final hasPipeLine = RegExp(
-      r'^\s*\|.*\|\s*$',
-      multiLine: true,
-    ).hasMatch(text);
-    final hasSeparator = RegExp(
-      r'^\s*\|?\s*:?-{3,}',
-      multiLine: true,
-    ).hasMatch(text);
-    return hasPipeLine && hasSeparator;
-  }
-
-  bool _needsHorizontalMarkdownScroll(String text) {
-    return _containsMarkdownTable(text) || text.contains('```');
   }
 
   bool _containsCodeFence(String text) {

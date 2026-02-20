@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
-import '../models/agent.dart';
-import 'agent_selector.dart';
 import 'attachment_menu.dart';
 import 'right_drawers.dart';
 
 class InputToolbar extends StatefulWidget {
   final Function(String) onSend;
-  final Agent currentAgent;
-  final Function(Agent) onAgentChanged;
   final double contextUsage;
   final bool isConnected;
   final List<OutlineItem> outlineItems;
@@ -18,8 +14,6 @@ class InputToolbar extends StatefulWidget {
   const InputToolbar({
     super.key,
     required this.onSend,
-    required this.currentAgent,
-    required this.onAgentChanged,
     required this.contextUsage,
     this.isConnected = true,
     this.outlineItems = const [],
@@ -108,21 +102,6 @@ class _InputToolbarState extends State<InputToolbar>
         _animationController.reverse();
       }
     });
-  }
-
-  void _showAgentSelector() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => AgentSelector(
-        currentAgent: widget.currentAgent,
-        onAgentSelected: (agent) {
-          widget.onAgentChanged(agent);
-          Navigator.pop(context);
-        },
-      ),
-    );
   }
 
   void _showOutlineDrawer() {
@@ -363,13 +342,11 @@ class _InputToolbarState extends State<InputToolbar>
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               child: Row(
                 children: [
-                  _buildAgentButton(),
-                  const SizedBox(width: 8),
-                  _buildOutlineButton(),
-                  const SizedBox(width: 8),
-                  _buildContextButton(),
-                  const SizedBox(width: 8),
                   _buildQuickCommandButton(),
+                  const SizedBox(width: 10),
+                  _buildContextButton(),
+                  const SizedBox(width: 10),
+                  _buildOutlineButton(),
                   const Spacer(),
                   _buildAnimatedAttachmentButton(),
                 ],
@@ -422,37 +399,6 @@ class _InputToolbarState extends State<InputToolbar>
               ),
             );
           },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAgentButton() {
-    return InkWell(
-      onTap: _showAgentSelector,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppTheme.lobsterRed, AppTheme.lobsterOrange],
-          ),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('🦞', style: TextStyle(fontSize: 16)),
-            const SizedBox(width: 4),
-            Text(
-              widget.currentAgent.name.substring(0, 1),
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-          ],
         ),
       ),
     );

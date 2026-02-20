@@ -525,10 +525,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 onSend: (text) {
                   provider.sendMessage(text);
                 },
-                currentAgent: provider.currentAgent,
-                onAgentChanged: (agent) {
-                  provider.setAgent(agent);
-                },
                 contextUsage: provider.contextUsage,
                 isConnected: provider.isConnected,
                 outlineItems: _buildOutlineItems(provider.messages),

@@ -21,14 +21,14 @@ enum ConnectionStatus {
 class GatewayService extends ChangeNotifier {
   final SshTunnelService _sshService = SshTunnelService();
   final GatewayProtocolService _protocolService = GatewayProtocolService();
-  
+
   Server? _currentServer;
   ConnectionStatus _status = ConnectionStatus.disconnected;
   String? _errorMessage;
   StreamSubscription? _sshSubscription;
   StreamSubscription? _chatSubscription;
   StreamSubscription? _agentSubscription;
-  
+
   // 当前运行的 runId
   String? _currentRunId;
 
@@ -39,20 +39,16 @@ class GatewayService extends ChangeNotifier {
   Server? get currentServer => _currentServer;
   String? get currentRunId => _currentRunId;
   int get tickIntervalMs => _protocolService.tickIntervalMs;
-  
+
   // 事件流
-  Stream<ChatEventPayload> get chatEventStream => _protocolService.chatEventStream;
-  Stream<AgentEventPayload> get agentEventStream => _protocolService.agentEventStream;
+  Stream<ChatEventPayload> get chatEventStream =>
+      _protocolService.chatEventStream;
+  Stream<AgentEventPayload> get agentEventStream =>
+      _protocolService.agentEventStream;
 
   /// 连接到服务器
   Future<bool> connect(Server server) async {
     try {
-      if (server.sshHost == null || server.sshHost!.isEmpty) {
-        throw Exception('SSH 主机地址不能为空');
-      }
-      if (server.sshUsername == null || server.sshUsername!.isEmpty) {
-        throw Exception('SSH 用户名不能为空');
-      }
       if (server.gatewayToken == null || server.gatewayToken!.isEmpty) {
         throw Exception('Gateway Token 不能为空');
       }
@@ -60,24 +56,43 @@ class GatewayService extends ChangeNotifier {
       final preparedServer = await _ensureDeviceIdentity(server);
       _currentServer = preparedServer;
       _errorMessage = null;
-      _updateStatus(ConnectionStatus.sshConnecting);
 
-      await _sshService.connect(
-        host: preparedServer.sshHost!,
-        port: preparedServer.sshPort ?? 22,
-        username: preparedServer.sshUsername!,
-        password: preparedServer.sshPassword ?? '',
-        localPort: preparedServer.localPort ?? 18789,
-        remoteHost: preparedServer.remoteHost ?? '127.0.0.1',
-        remotePort: preparedServer.remotePort ?? 18789,
-      );
+      final shouldUseDirect =
+          preparedServer.connectionMode == GatewayConnectionMode.direct;
+      late final String wsUrl;
 
-      await _waitForSshForwarding();
-      _updateStatus(ConnectionStatus.sshConnected);
+      if (shouldUseDirect) {
+        await _sshService.disconnect();
+        wsUrl = _resolveDirectGatewayUrl(preparedServer);
+      } else {
+        if (preparedServer.sshHost == null || preparedServer.sshHost!.isEmpty) {
+          throw Exception('SSH 主机地址不能为空');
+        }
+        if (preparedServer.sshUsername == null ||
+            preparedServer.sshUsername!.isEmpty) {
+          throw Exception('SSH 用户名不能为空');
+        }
+
+        _updateStatus(ConnectionStatus.sshConnecting);
+        await _sshService.connect(
+          host: preparedServer.sshHost!,
+          port: preparedServer.sshPort ?? 22,
+          username: preparedServer.sshUsername!,
+          password: preparedServer.sshPassword ?? '',
+          localPort: preparedServer.localPort ?? 18789,
+          remoteHost: preparedServer.remoteHost ?? '127.0.0.1',
+          remotePort: preparedServer.remotePort ?? 18789,
+        );
+
+        await _waitForSshForwarding();
+        _updateStatus(ConnectionStatus.sshConnected);
+
+        final actualLocalPort =
+            _sshService.localPort ?? (preparedServer.localPort ?? 18789);
+        wsUrl = 'ws://127.0.0.1:$actualLocalPort';
+      }
 
       _updateStatus(ConnectionStatus.wsConnecting);
-      final actualLocalPort = _sshService.localPort ?? (preparedServer.localPort ?? 18789);
-      final wsUrl = 'ws://127.0.0.1:$actualLocalPort';
       print('连接 WebSocket: $wsUrl');
       await _protocolService.connect(wsUrl);
       _updateStatus(ConnectionStatus.wsConnected);
@@ -103,7 +118,6 @@ class GatewayService extends ChangeNotifier {
         _updateStatus(ConnectionStatus.error);
         return false;
       }
-
     } catch (e) {
       _errorMessage = e.toString();
       _updateStatus(ConnectionStatus.error);
@@ -111,12 +125,28 @@ class GatewayService extends ChangeNotifier {
     }
   }
 
+  String _resolveDirectGatewayUrl(Server server) {
+    final rawUrl = server.gatewayUrl?.trim() ?? '';
+    if (rawUrl.isNotEmpty) {
+      return rawUrl;
+    }
+
+    final host = server.sshHost?.trim() ?? '';
+    if (host.isEmpty) {
+      throw Exception('直连模式需要填写 Gateway URL 或服务器地址');
+    }
+
+    final port = server.remotePort ?? 18789;
+    return 'ws://$host:$port';
+  }
+
   /// 断开连接
   Future<Server> _ensureDeviceIdentity(Server server) async {
     final deviceId = (server.deviceId != null && server.deviceId!.isNotEmpty)
         ? server.deviceId
         : 'clawchat-${server.id}';
-    final deviceName = (server.deviceName != null && server.deviceName!.isNotEmpty)
+    final deviceName =
+        (server.deviceName != null && server.deviceName!.isNotEmpty)
         ? server.deviceName
         : 'ClawChat ${server.name}';
 
@@ -147,7 +177,7 @@ class GatewayService extends ChangeNotifier {
     _chatSubscription = null;
     _agentSubscription = null;
     _sshSubscription = null;
-    
+
     await _protocolService.disconnect();
     await _sshService.disconnect();
     _currentServer = null;
@@ -157,11 +187,14 @@ class GatewayService extends ChangeNotifier {
   }
 
   /// 发送聊天消息
-  Future<ChatSendResult> sendMessage(String message, {String sessionKey = 'main'}) async {
+  Future<ChatSendResult> sendMessage(
+    String message, {
+    String sessionKey = 'main',
+  }) async {
     if (!isConnected) {
       return ChatSendResult(errorMessage: '未连接到服务器');
     }
-    
+
     final result = await _protocolService.chatSend(message, sessionKey);
     if (result.isSuccess && result.response != null) {
       _currentRunId = result.response!.runId;
@@ -170,11 +203,27 @@ class GatewayService extends ChangeNotifier {
   }
 
   /// 获取聊天历史
-  Future<List<Map<String, dynamic>>> getChatHistory({String sessionKey = 'main'}) async {
+  Future<List<Map<String, dynamic>>> getChatHistory({
+    String sessionKey = 'main',
+  }) async {
     if (!isConnected) return [];
     return await _protocolService.chatHistory(sessionKey);
   }
-  
+
+  /// 获取会话列表
+  Future<List<Map<String, dynamic>>> getSessionsList({
+    int limit = 100,
+    bool includeDerivedTitles = true,
+    bool includeLastMessage = true,
+  }) async {
+    if (!isConnected) return [];
+    return await _protocolService.sessionsList(
+      limit: limit,
+      includeDerivedTitles: includeDerivedTitles,
+      includeLastMessage: includeLastMessage,
+    );
+  }
+
   /// 健康检查
   Future<bool> healthCheck({int timeoutMs = 5000}) async {
     if (!isConnected) return false;
@@ -184,7 +233,7 @@ class GatewayService extends ChangeNotifier {
   /// 等待 SSH 转发就绪
   Future<void> _waitForSshForwarding() async {
     if (_sshService.currentState == SshConnectionState.forwarding) return;
-    
+
     await for (final state in _sshService.stateStream) {
       if (state == SshConnectionState.forwarding) return;
       if (state == SshConnectionState.error) {
@@ -196,12 +245,14 @@ class GatewayService extends ChangeNotifier {
   /// 开始监听 Gateway 事件
   void _startListeningToEvents() {
     _chatSubscription = _protocolService.chatEventStream.listen((event) {
-      if (event.state == 'final' || event.state == 'aborted' || event.state == 'error') {
+      if (event.state == 'final' ||
+          event.state == 'aborted' ||
+          event.state == 'error') {
         _currentRunId = null;
       }
       notifyListeners();
     });
-    
+
     _agentSubscription = _protocolService.agentEventStream.listen((event) {
       notifyListeners();
     });

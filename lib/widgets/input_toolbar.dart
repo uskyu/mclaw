@@ -29,9 +29,20 @@ class InputToolbar extends StatefulWidget {
 class _InputToolbarState extends State<InputToolbar>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const List<MapEntry<String, String>> _quickCommands = [
+    MapEntry('/help', '帮助'),
+    MapEntry('/commands', '全部指令'),
     MapEntry('/status', '状态'),
+    MapEntry('/new', '重置当前会话'),
+    MapEntry('/reset', '重置会话'),
+    MapEntry('/stop', '停止当前任务'),
     MapEntry('/context list', '上下文列表'),
     MapEntry('/context detail', '上下文详情'),
+    MapEntry('/model', '模型菜单'),
+    MapEntry('/model list', '模型列表'),
+    MapEntry('/queue', '队列状态'),
+    MapEntry('/whoami', '身份信息'),
+    MapEntry('/think low', '低思考模式'),
+    MapEntry('/verbose off', '关闭详细输出'),
     MapEntry('/usage tokens', '用量摘要'),
     MapEntry('/usage full', '用量完整'),
     MapEntry('/usage off', '关闭用量'),
@@ -52,12 +63,9 @@ class _InputToolbarState extends State<InputToolbar>
       vsync: this,
     );
     _rotationAnimation = Tween<double>(begin: 0, end: 0.125).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-    
+
     // 监听焦点变化，当输入框获得焦点时收起附件菜单
     _focusNode.addListener(() {
       if (_focusNode.hasFocus && _isAttachmentExpanded) {
@@ -150,14 +158,14 @@ class _InputToolbarState extends State<InputToolbar>
     final l10n = AppLocalizations.of(context)!;
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardVisible = keyboardHeight > 0;
-    
+
     // 如果键盘可见，强制收起附件菜单
     if (isKeyboardVisible && _isAttachmentExpanded) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _closeAttachmentMenu();
       });
     }
-    
+
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -269,7 +277,9 @@ class _InputToolbarState extends State<InputToolbar>
               child: Icon(
                 _isAttachmentExpanded ? Icons.close : Icons.add,
                 size: 22,
-                color: _isAttachmentExpanded ? AppTheme.appleRed : AppTheme.appleGray,
+                color: _isAttachmentExpanded
+                    ? AppTheme.appleRed
+                    : AppTheme.appleGray,
               ),
             );
           },
@@ -293,10 +303,7 @@ class _InputToolbarState extends State<InputToolbar>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              '🦞',
-              style: TextStyle(fontSize: 16),
-            ),
+            const Text('🦞', style: TextStyle(fontSize: 16)),
             const SizedBox(width: 4),
             Text(
               widget.currentAgent.name.substring(0, 1),
@@ -376,7 +383,10 @@ class _InputToolbarState extends State<InputToolbar>
                   Expanded(
                     child: Text(
                       entry.value,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -404,11 +414,7 @@ class _InputToolbarState extends State<InputToolbar>
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.flash_on_rounded,
-              size: 18,
-              color: AppTheme.appleBlue,
-            ),
+            Icon(Icons.flash_on_rounded, size: 18, color: AppTheme.appleBlue),
             SizedBox(width: 4),
             Text(
               '指令',
@@ -435,11 +441,7 @@ class _InputToolbarState extends State<InputToolbar>
           color: AppTheme.appleBlue,
           shape: BoxShape.circle,
         ),
-        child: const Icon(
-          Icons.arrow_upward,
-          color: Colors.white,
-          size: 20,
-        ),
+        child: const Icon(Icons.arrow_upward, color: Colors.white, size: 20),
       ),
     );
   }

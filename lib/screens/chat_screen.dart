@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
+import '../models/message.dart';
 import '../theme/app_theme.dart';
-import '../services/gateway_service.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/input_toolbar.dart';
@@ -19,47 +22,227 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _scrollController = ScrollController();
+  final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
+  Timer? _scrollButtonsTimer;
+  bool _showScrollButtons = false;
   int _lastMessageCount = 0;
 
   @override
   void dispose() {
+    _scrollButtonsTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      final target = _scrollController.position.maxScrollExtent;
-      _fastScrollTo(target);
+  void _setScrollButtonsVisible(bool visible) {
+    if (_showScrollButtons == visible || !mounted) {
+      return;
     }
+    setState(() {
+      _showScrollButtons = visible;
+    });
   }
 
-  void _scrollToTop() {
-    if (_scrollController.hasClients) {
-      _fastScrollTo(0);
-    }
+  void _scheduleHideScrollButtons() {
+    _scrollButtonsTimer?.cancel();
+    _scrollButtonsTimer = Timer(const Duration(milliseconds: 900), () {
+      _setScrollButtonsVisible(false);
+    });
   }
 
-  void _fastScrollTo(double target) {
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification ||
+        notification is ScrollUpdateNotification ||
+        notification is OverscrollNotification ||
+        (notification is UserScrollNotification &&
+            notification.direction != ScrollDirection.idle)) {
+      _setScrollButtonsVisible(true);
+      _scheduleHideScrollButtons();
+      return false;
+    }
+
+    if (notification is ScrollEndNotification ||
+        (notification is UserScrollNotification &&
+            notification.direction == ScrollDirection.idle)) {
+      _scheduleHideScrollButtons();
+    }
+
+    return false;
+  }
+
+  void _syncMessageKeys(int messageCount) {
+    _messageKeys.removeWhere((index, _) => index >= messageCount);
+  }
+
+  GlobalKey _messageKeyForIndex(int index) {
+    return _messageKeys.putIfAbsent(
+      index,
+      () => GlobalKey(debugLabel: 'chat-msg-$index'),
+    );
+  }
+
+  Future<void> _scrollToBottom() async {
     if (!_scrollController.hasClients) return;
-    _scrollController.jumpTo(target);
+    final target = _scrollController.position.maxScrollExtent;
+    await _smoothScrollTo(target);
+  }
+
+  Future<void> _scrollToTop() async {
+    if (!_scrollController.hasClients) return;
+    await _smoothScrollTo(0);
+  }
+
+  Future<void> _smoothScrollTo(double target) async {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    final clamped = target
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    final distance = (clamped - position.pixels).abs();
+    if (distance < 1) {
+      return;
+    }
+
+    final durationMs = (180 + (distance * 0.08)).clamp(180, 520).round();
+    await _scrollController.animateTo(
+      clamped,
+      duration: Duration(milliseconds: durationMs),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  double? _offsetForMessageIndex(int index) {
+    final keyContext = _messageKeys[index]?.currentContext;
+    final renderObject = keyContext?.findRenderObject();
+    if (renderObject == null ||
+        !renderObject.attached ||
+        !_scrollController.hasClients) {
+      return null;
+    }
+    final viewport = RenderAbstractViewport.of(renderObject);
+    final reveal = viewport.getOffsetToReveal(renderObject, 0).offset;
+    final position = _scrollController.position;
+    return reveal
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+  }
+
+  int _resolveCurrentMessageIndex(int totalCount) {
+    if (!_scrollController.hasClients || totalCount <= 1) {
+      return 0;
+    }
+    final position = _scrollController.position;
+    if (position.maxScrollExtent <= 0) {
+      return 0;
+    }
+
+    final ratio = (position.pixels / position.maxScrollExtent).clamp(0.0, 1.0);
+    final estimated = (ratio * (totalCount - 1)).round();
+
+    var bestIndex = estimated;
+    var bestDistance = double.infinity;
+    final start = (estimated - 8).clamp(0, totalCount - 1);
+    final end = (estimated + 8).clamp(0, totalCount - 1);
+    for (var i = start; i <= end; i++) {
+      final offset = _offsetForMessageIndex(i);
+      if (offset == null) {
+        continue;
+      }
+      final distance = (offset - position.pixels).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
+  Future<void> _scrollToMessageIndex({
+    required int index,
+    required int totalCount,
+  }) {
+    if (!_scrollController.hasClients || totalCount <= 0) {
+      return Future.value();
+    }
+
+    final exactOffset = _offsetForMessageIndex(index);
+    if (exactOffset != null) {
+      return _smoothScrollTo(exactOffset);
+    }
+
+    final position = _scrollController.position;
+    final normalized = totalCount <= 1 ? 0.0 : (index / (totalCount - 1));
+    final estimated = position.maxScrollExtent * normalized;
+    return _smoothScrollTo(estimated);
+  }
+
+  Future<void> _jumpConversation({
+    required List<Message> messages,
+    required bool forward,
+  }) async {
+    if (messages.isEmpty) {
+      return;
+    }
+
+    final anchors = <int>[];
+    for (var i = 0; i < messages.length; i++) {
+      if (messages[i].type == MessageType.user) {
+        anchors.add(i);
+      }
+    }
+    if (anchors.isEmpty) {
+      anchors.add(0);
+    }
+
+    final currentIndex = _resolveCurrentMessageIndex(messages.length);
+
+    int? targetIndex;
+    if (forward) {
+      for (final anchor in anchors) {
+        if (anchor > currentIndex) {
+          targetIndex = anchor;
+          break;
+        }
+      }
+      if (targetIndex == null) {
+        await _scrollToBottom();
+        return;
+      }
+    } else {
+      for (var i = anchors.length - 1; i >= 0; i--) {
+        final anchor = anchors[i];
+        if (anchor < currentIndex) {
+          targetIndex = anchor;
+          break;
+        }
+      }
+      if (targetIndex == null) {
+        await _scrollToTop();
+        return;
+      }
+    }
+
+    await _scrollToMessageIndex(
+      index: targetIndex,
+      totalCount: messages.length,
+    );
   }
 
   bool _isNearBottom() {
     if (!_scrollController.hasClients) return true;
-    return (_scrollController.position.maxScrollExtent - _scrollController.offset) < 120;
+    return (_scrollController.position.maxScrollExtent -
+            _scrollController.offset) <
+        120;
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Scaffold(
       key: _scaffoldKey,
       resizeToAvoidBottomInset: true,
-      drawer: Sidebar(
-        onClose: () => _scaffoldKey.currentState?.closeDrawer(),
-      ),
+      drawer: Sidebar(onClose: () => _scaffoldKey.currentState?.closeDrawer()),
       appBar: _buildAppBar(l10n),
       body: Column(
         children: [
@@ -69,45 +252,89 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Consumer<ChatProvider>(
               builder: (context, provider, child) {
                 final messageCount = provider.messages.length;
+                _syncMessageKeys(messageCount);
                 if (messageCount != _lastMessageCount) {
-                  final shouldAutoScroll = _lastMessageCount == 0 || _isNearBottom();
+                  final shouldAutoScroll =
+                      _lastMessageCount == 0 || _isNearBottom();
                   _lastMessageCount = messageCount;
                   if (shouldAutoScroll) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                    WidgetsBinding.instance.addPostFrameCallback(
+                      (_) => unawaited(_scrollToBottom()),
+                    );
                   }
                 }
-                
+
                 if (provider.messages.isEmpty) {
                   return _buildEmptyState(l10n);
                 }
 
                 return Stack(
                   children: [
-                    ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      itemCount: provider.messages.length,
-                      itemBuilder: (context, index) {
-                        return MessageBubble(message: provider.messages[index]);
-                      },
+                    NotificationListener<ScrollNotification>(
+                      onNotification: _onScrollNotification,
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        itemCount: provider.messages.length,
+                        itemBuilder: (context, index) {
+                          return KeyedSubtree(
+                            key: _messageKeyForIndex(index),
+                            child: MessageBubble(
+                              message: provider.messages[index],
+                            ),
+                          );
+                        },
+                      ),
                     ),
                     Align(
                       alignment: Alignment.centerRight,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 10),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _buildScrollButton(
-                              icon: Icons.keyboard_arrow_up,
-                              onTap: _scrollToTop,
+                      child: IgnorePointer(
+                        ignoring: !_showScrollButtons,
+                        child: AnimatedOpacity(
+                          opacity: _showScrollButtons ? 1 : 0,
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOut,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 10),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildScrollButton(
+                                  icon: Icons.vertical_align_top,
+                                  tooltip: '顶部',
+                                  onTap: () => unawaited(_scrollToTop()),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildScrollButton(
+                                  icon: Icons.keyboard_arrow_up,
+                                  tooltip: '上一对话',
+                                  onTap: () => unawaited(
+                                    _jumpConversation(
+                                      messages: provider.messages,
+                                      forward: false,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 22),
+                                _buildScrollButton(
+                                  icon: Icons.keyboard_arrow_down,
+                                  tooltip: '下一对话',
+                                  onTap: () => unawaited(
+                                    _jumpConversation(
+                                      messages: provider.messages,
+                                      forward: true,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _buildScrollButton(
+                                  icon: Icons.vertical_align_bottom,
+                                  tooltip: '底部',
+                                  onTap: () => unawaited(_scrollToBottom()),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 14),
-                            _buildScrollButton(
-                              icon: Icons.keyboard_arrow_down,
-                              onTap: _scrollToBottom,
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -138,22 +365,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildScrollButton({
     required IconData icon,
+    required String tooltip,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.72),
-      shape: const CircleBorder(),
-      elevation: 1,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 38,
-          height: 38,
-          child: Icon(
-            icon,
-            color: Colors.black87,
-            size: 22,
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.8),
+        shape: const CircleBorder(),
+        elevation: 1,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 38,
+            height: 38,
+            child: Icon(icon, color: Colors.black87, size: 22),
           ),
         ),
       ),
@@ -168,7 +395,7 @@ class _ChatScreenState extends State<ChatScreen> {
           return Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 8),
-            color: AppTheme.appleBlue.withOpacity(0.1),
+            color: AppTheme.appleBlue.withValues(alpha: 0.1),
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -177,16 +404,15 @@ class _ChatScreenState extends State<ChatScreen> {
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.appleBlue),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppTheme.appleBlue,
+                    ),
                   ),
                 ),
                 SizedBox(width: 8),
                 Text(
                   '正在连接...',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.appleBlue,
-                  ),
+                  style: TextStyle(fontSize: 13, color: AppTheme.appleBlue),
                 ),
               ],
             ),
@@ -197,7 +423,7 @@ class _ChatScreenState extends State<ChatScreen> {
           return Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            color: AppTheme.appleRed.withOpacity(0.1),
+            color: AppTheme.appleRed.withValues(alpha: 0.1),
             child: Row(
               children: [
                 const Icon(
@@ -246,7 +472,7 @@ class _ChatScreenState extends State<ChatScreen> {
           builder: (context, provider, child) {
             final isConnected = provider.isConnected;
             final isConnecting = provider.isConnecting;
-            
+
             return TextButton.icon(
               onPressed: () {
                 Navigator.push(
@@ -260,27 +486,27 @@ class _ChatScreenState extends State<ChatScreen> {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: isConnecting 
-                      ? Colors.orange 
-                      : isConnected 
-                          ? AppTheme.appleGreen 
-                          : AppTheme.appleRed,
+                  color: isConnecting
+                      ? Colors.orange
+                      : isConnected
+                      ? AppTheme.appleGreen
+                      : AppTheme.appleRed,
                   shape: BoxShape.circle,
                 ),
               ),
               label: Text(
-                isConnecting 
-                    ? '连接中' 
-                    : isConnected 
-                        ? l10n.online 
-                        : '离线',
+                isConnecting
+                    ? '连接中'
+                    : isConnected
+                    ? l10n.online
+                    : '离线',
                 style: TextStyle(
                   fontSize: 15,
-                  color: isConnecting 
-                      ? Colors.orange 
-                      : isConnected 
-                          ? AppTheme.appleGreen 
-                          : AppTheme.appleRed,
+                  color: isConnecting
+                      ? Colors.orange
+                      : isConnected
+                      ? AppTheme.appleGreen
+                      : AppTheme.appleRed,
                 ),
               ),
             );
@@ -308,26 +534,20 @@ class _ChatScreenState extends State<ChatScreen> {
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.lobsterRed.withOpacity(0.3),
+                  color: AppTheme.lobsterRed.withValues(alpha: 0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
               ],
             ),
             child: const Center(
-              child: Text(
-                '🦞',
-                style: TextStyle(fontSize: 40),
-              ),
+              child: Text('🦞', style: TextStyle(fontSize: 40)),
             ),
           ),
           const SizedBox(height: 24),
           Text(
             l10n.appTitle,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Text(

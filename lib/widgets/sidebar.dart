@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/chat_provider.dart';
 import '../theme/app_theme.dart';
 import '../screens/server_management_screen.dart';
 import '../screens/settings_screen.dart';
@@ -7,10 +9,7 @@ import '../screens/settings_screen.dart';
 class Sidebar extends StatelessWidget {
   final VoidCallback onClose;
 
-  const Sidebar({
-    super.key,
-    required this.onClose,
-  });
+  const Sidebar({super.key, required this.onClose});
 
   @override
   Widget build(BuildContext context) {
@@ -52,12 +51,7 @@ class Sidebar extends StatelessWidget {
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Center(
-              child: Text(
-                '🦞',
-                style: TextStyle(
-                  fontSize: 20,
-                ),
-              ),
+              child: Text('🦞', style: TextStyle(fontSize: 20)),
             ),
           ),
           const SizedBox(width: 12),
@@ -138,6 +132,7 @@ class Sidebar extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: ElevatedButton.icon(
         onPressed: () {
+          context.read<ChatProvider>().createNewConversation();
           onClose();
         },
         icon: const Icon(Icons.add, size: 20),
@@ -155,32 +150,96 @@ class Sidebar extends StatelessWidget {
   }
 
   Widget _buildConversationList(BuildContext context, AppLocalizations l10n) {
-    final conversations = [
-      {'title': l10n.generalAssistant, 'time': l10n.today},
-      {'title': 'React Native', 'time': l10n.yesterday},
-      {'title': 'Flutter', 'time': l10n.yesterday},
-      {'title': 'Python', 'time': l10n.past7Days},
-      {'title': 'Machine Learning', 'time': l10n.past7Days},
-    ];
+    return Consumer<ChatProvider>(
+      builder: (context, provider, child) {
+        final conversations = provider.conversations;
+        if (conversations.isEmpty) {
+          return Center(
+            child: Text(
+              '暂无历史对话',
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
+            ),
+          );
+        }
 
-    return ListView.builder(
-      itemCount: conversations.length,
-      itemBuilder: (context, index) {
-        final conversation = conversations[index];
-        return ListTile(
-          leading: const Icon(Icons.chat_bubble_outline, size: 20),
-          title: Text(
-            conversation['title']!,
-            style: const TextStyle(fontSize: 15),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          onTap: () {
-            onClose();
+        return ListView.builder(
+          itemCount: conversations.length,
+          itemBuilder: (context, index) {
+            final conversation = conversations[index];
+            final selected = _isSameSessionKey(
+              provider.currentConversationId,
+              conversation.id,
+            );
+            return ListTile(
+              dense: true,
+              selected: selected,
+              selectedTileColor: AppTheme.appleBlue.withValues(alpha: 0.1),
+              leading: Icon(
+                selected ? Icons.chat : Icons.chat_bubble_outline,
+                size: 20,
+                color: selected
+                    ? AppTheme.appleBlue
+                    : Theme.of(context).iconTheme.color,
+              ),
+              title: Text(
+                conversation.title,
+                style: const TextStyle(fontSize: 15),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                _formatConversationTime(
+                  context,
+                  conversation.lastUpdated,
+                  l10n,
+                ),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                ),
+              ),
+              onTap: () {
+                provider.switchConversation(conversation.id);
+                onClose();
+              },
+            );
           },
         );
       },
     );
+  }
+
+  String _normalizeSessionKey(String key) {
+    final normalized = key.toLowerCase().trim();
+    if (normalized == 'agent:main:main') {
+      return 'main';
+    }
+    return normalized;
+  }
+
+  bool _isSameSessionKey(String a, String b) {
+    return _normalizeSessionKey(a) == _normalizeSessionKey(b);
+  }
+
+  String _formatConversationTime(
+    BuildContext context,
+    DateTime value,
+    AppLocalizations l10n,
+  ) {
+    final now = DateTime.now();
+    final date = DateTime(value.year, value.month, value.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final diff = today.difference(date).inDays;
+    if (diff <= 0) {
+      return l10n.today;
+    }
+    if (diff == 1) {
+      return l10n.yesterday;
+    }
+    return '${value.month}/${value.day}';
   }
 
   Widget _buildBottomActions(BuildContext context, AppLocalizations l10n) {

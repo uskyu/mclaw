@@ -75,7 +75,7 @@ class ChatSendResult {
   final String? errorMessage;
 
   ChatSendResult({this.response, this.errorCode, this.errorMessage});
-  
+
   bool get isSuccess => response != null && errorMessage == null;
 }
 
@@ -141,7 +141,7 @@ class GatewayProtocolService {
   final _chatEventController = StreamController<ChatEventPayload>.broadcast();
   final _agentEventController = StreamController<AgentEventPayload>.broadcast();
   final _pendingRequests = <String, Completer<Map<String, dynamic>>>{};
-  
+
   GatewayConnectionState _currentState = GatewayConnectionState.disconnected;
   String? _lastError;
   String? _deviceToken;
@@ -150,7 +150,8 @@ class GatewayProtocolService {
   Stream<GatewayConnectionState> get stateStream => _stateController.stream;
   Stream<GatewayMessage> get messageStream => _messageController.stream;
   Stream<ChatEventPayload> get chatEventStream => _chatEventController.stream;
-  Stream<AgentEventPayload> get agentEventStream => _agentEventController.stream;
+  Stream<AgentEventPayload> get agentEventStream =>
+      _agentEventController.stream;
   GatewayConnectionState get currentState => _currentState;
   String? get lastError => _lastError;
   String? get deviceToken => _deviceToken;
@@ -163,15 +164,19 @@ class GatewayProtocolService {
       _updateState(GatewayConnectionState.connecting);
       _lastError = null;
 
+      final uri = Uri.parse(wsUrl);
+      final originScheme = uri.scheme == 'wss' ? 'https' : 'http';
+      final originHost = uri.host;
+      final originPort = uri.hasPort ? ':${uri.port}' : '';
+      final origin = '$originScheme://$originHost$originPort';
+
       final socket = await WebSocket.connect(
         wsUrl,
-        headers: {
-          'Origin': 'http://localhost:18789',
-        },
+        headers: {'Origin': origin},
       );
-      
+
       _channel = IOWebSocketChannel(socket);
-      
+
       _channel!.stream.listen(
         (data) => _handleMessage(data),
         onError: (error) {
@@ -185,7 +190,6 @@ class GatewayProtocolService {
           _updateState(GatewayConnectionState.disconnected);
         },
       );
-
     } catch (e) {
       _lastError = '连接失败: $e';
       _updateState(GatewayConnectionState.error);
@@ -206,7 +210,10 @@ class GatewayProtocolService {
     try {
       _updateState(GatewayConnectionState.handshaking);
 
-      final challengeMsg = await _waitForEvent('connect.challenge', timeout: Duration(seconds: 10));
+      final challengeMsg = await _waitForEvent(
+        'connect.challenge',
+        timeout: Duration(seconds: 10),
+      );
       if (challengeMsg == null) {
         throw Exception('未收到 challenge');
       }
@@ -232,41 +239,43 @@ class GatewayProtocolService {
         'scopes': ['operator.read', 'operator.write'],
         'auth': {
           'token': token,
-          if (deviceToken != null && deviceToken.isNotEmpty) 'deviceToken': deviceToken,
+          if (deviceToken != null && deviceToken.isNotEmpty)
+            'deviceToken': deviceToken,
         },
       };
 
       print('发送 connect 参数: ${jsonEncode(connectParams)}');
 
       final response = await _sendRequest('connect', connectParams, requestId);
-      
+
       if (response['ok'] == true) {
         final payload = response['payload'] as Map<String, dynamic>?;
         if (payload?['type'] == 'hello-ok') {
           final grantedScopes = _extractGrantedScopes(payload);
-          if (grantedScopes.isNotEmpty && !grantedScopes.contains('operator.write')) {
-            _lastError = '连接成功但缺少 operator.write 权限。请在 Gateway 开启 controlUi.allowInsecureAuth 或完成设备配对。';
+          if (grantedScopes.isNotEmpty &&
+              !grantedScopes.contains('operator.write')) {
+            _lastError =
+                '连接成功但缺少 operator.write 权限。请在 Gateway 开启 controlUi.allowInsecureAuth 或完成设备配对。';
             _updateState(GatewayConnectionState.error);
             return false;
           }
 
           _deviceToken = payload?['auth']?['deviceToken'] as String?;
-          
+
           final policy = payload?['policy'] as Map<String, dynamic>?;
           if (policy != null && policy['tickIntervalMs'] != null) {
             _tickIntervalMs = policy['tickIntervalMs'] as int;
           }
-          
+
           _updateState(GatewayConnectionState.connected);
           return true;
         }
       }
-      
+
       final errorMsg = response['error']?['message'] ?? '握手失败';
       _lastError = errorMsg.toString();
       _updateState(GatewayConnectionState.error);
       return false;
-
     } catch (e) {
       _lastError = '握手失败: $e';
       _updateState(GatewayConnectionState.error);
@@ -276,7 +285,7 @@ class GatewayProtocolService {
 
   /// 发送聊天消息
   Future<ChatSendResult> chatSend(
-    String message, 
+    String message,
     String sessionKey, {
     String? thinking,
     List<Map<String, dynamic>>? attachments,
@@ -288,24 +297,31 @@ class GatewayProtocolService {
       'idempotencyKey': _generateRequestId(),
       'timeoutMs': timeoutMs,
     };
-    
+
     if (thinking != null && thinking.isNotEmpty) {
       params['thinking'] = thinking;
     }
-    
+
     if (attachments != null && attachments.isNotEmpty) {
       params['attachments'] = attachments;
     }
 
     try {
-      final response = await _sendRequest('chat.send', params, null, timeoutSeconds: 35);
-      
+      final response = await _sendRequest(
+        'chat.send',
+        params,
+        null,
+        timeoutSeconds: 35,
+      );
+
       if (response['ok'] == true && response['payload'] != null) {
         return ChatSendResult(
-          response: ChatSendResponse.fromJson(response['payload'] as Map<String, dynamic>),
+          response: ChatSendResponse.fromJson(
+            response['payload'] as Map<String, dynamic>,
+          ),
         );
       }
-      
+
       final error = response['error'] as Map<String, dynamic>?;
       return ChatSendResult(
         errorCode: error?['code'] as String?,
@@ -320,9 +336,14 @@ class GatewayProtocolService {
   /// 获取聊天历史
   Future<List<Map<String, dynamic>>> chatHistory(String sessionKey) async {
     final params = {'sessionKey': sessionKey};
-    
+
     try {
-      final response = await _sendRequest('chat.history', params, null, timeoutSeconds: 35);
+      final response = await _sendRequest(
+        'chat.history',
+        params,
+        null,
+        timeoutSeconds: 35,
+      );
       if (response['ok'] == true && response['payload'] != null) {
         final payload = response['payload'] as Map<String, dynamic>;
         final messages = payload['messages'] as List<dynamic>?;
@@ -335,10 +356,54 @@ class GatewayProtocolService {
     }
   }
 
+  /// 获取会话列表
+  Future<List<Map<String, dynamic>>> sessionsList({
+    int limit = 100,
+    bool includeDerivedTitles = true,
+    bool includeLastMessage = true,
+  }) async {
+    final params = <String, dynamic>{
+      'limit': limit,
+      'includeGlobal': false,
+      'includeUnknown': false,
+      'includeDerivedTitles': includeDerivedTitles,
+      'includeLastMessage': includeLastMessage,
+    };
+
+    try {
+      final response = await _sendRequest(
+        'sessions.list',
+        params,
+        null,
+        timeoutSeconds: 35,
+      );
+      if (response['ok'] == true && response['payload'] != null) {
+        final payload = response['payload'] as Map<String, dynamic>;
+        final sessions = payload['sessions'] as List<dynamic>?;
+        if (sessions == null) {
+          return [];
+        }
+        return sessions
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      print('sessions.list 错误: $e');
+      return [];
+    }
+  }
+
   /// 健康检查
   Future<bool> health({int timeoutMs = 5000}) async {
     try {
-      final response = await _sendRequest('health', null, null, timeoutSeconds: (timeoutMs / 1000).ceil());
+      final response = await _sendRequest(
+        'health',
+        null,
+        null,
+        timeoutSeconds: (timeoutMs / 1000).ceil(),
+      );
       return response['ok'] == true || response['payload']?['ok'] == true;
     } catch (e) {
       return false;
@@ -347,11 +412,11 @@ class GatewayProtocolService {
 
   /// 发送请求
   Future<Map<String, dynamic>> _sendRequest(
-    String method, 
-    Map<String, dynamic>? params, 
-    String? id, 
-    {int timeoutSeconds = 30}
-  ) async {
+    String method,
+    Map<String, dynamic>? params,
+    String? id, {
+    int timeoutSeconds = 30,
+  }) async {
     if (_channel == null) {
       throw Exception('WebSocket 未连接');
     }
@@ -383,9 +448,12 @@ class GatewayProtocolService {
   }
 
   /// 等待特定事件
-  Future<GatewayMessage?> _waitForEvent(String eventName, {Duration? timeout}) async {
+  Future<GatewayMessage?> _waitForEvent(
+    String eventName, {
+    Duration? timeout,
+  }) async {
     final completer = Completer<GatewayMessage>();
-    
+
     late StreamSubscription subscription;
     subscription = _messageController.stream.listen((msg) {
       if (msg.type == 'event' && msg.event == eventName) {
@@ -411,10 +479,12 @@ class GatewayProtocolService {
   void _handleMessage(dynamic data) {
     try {
       final json = jsonDecode(data as String) as Map<String, dynamic>;
-      print('收到消息: ${json['type']} ${json['method'] ?? json['event'] ?? json['id'] ?? ''}');
-      
+      print(
+        '收到消息: ${json['type']} ${json['method'] ?? json['event'] ?? json['id'] ?? ''}',
+      );
+
       final message = GatewayMessage.fromJson(json);
-      
+
       _messageController.add(message);
 
       // 处理响应
@@ -430,17 +500,16 @@ class GatewayProtocolService {
           print('未找到请求: ${message.id}, pending: ${_pendingRequests.keys}');
         }
       }
-      
+
       // 处理事件
       if (message.type == 'event') {
         _handleEvent(message);
       }
-      
     } catch (e) {
       print('消息解析错误: $e');
     }
   }
-  
+
   /// 处理事件
   void _handleEvent(GatewayMessage message) {
     switch (message.event) {
@@ -514,7 +583,7 @@ class GatewayProtocolService {
 class TimeoutException implements Exception {
   final String message;
   TimeoutException(this.message);
-  
+
   @override
   String toString() => message;
 }

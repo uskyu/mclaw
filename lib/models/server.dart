@@ -1,8 +1,8 @@
 /// 服务器类型
-enum ServerType {
-  openai,
-  openclaw,
-}
+enum ServerType { openai, openclaw }
+
+/// OpenClaw Gateway 连接模式
+enum GatewayConnectionMode { sshTunnel, direct }
 
 /// 服务器配置模型
 class Server {
@@ -21,23 +21,27 @@ class Server {
   final int? sshPort;
   final String? sshUsername;
   final String? sshPassword;
-  
+
   // Gateway 端口配置（可自动获取或手动设置）
-  final int? remotePort;     // Gateway 在远程服务器上的端口（默认 18789）
-  final int? localPort;      // 本地转发端口（默认 18789）
-  final String? remoteHost;  // Gateway 绑定的远程地址（默认 127.0.0.1）
-  
+  final int? remotePort; // Gateway 在远程服务器上的端口（默认 18789）
+  final int? localPort; // 本地转发端口（默认 18789）
+  final String? remoteHost; // Gateway 绑定的远程地址（默认 127.0.0.1）
+
   // Gateway 认证
   final String? gatewayToken;
   final String? deviceId;
   final String? deviceName;
   final String? deviceToken;
-  
+
+  // 连接模式
+  final GatewayConnectionMode connectionMode;
+  final String? gatewayUrl;
+
   // 客户端配置
-  final String? clientId;    // 如 'openclaw-control-ui', 'cli'
-  final String? clientMode;  // 如 'ui', 'cli'
-  final String? platform;    // 如 'android', 'ios'
-  final String? locale;      // 如 'zh-CN', 'en-US'
+  final String? clientId; // 如 'openclaw-control-ui', 'cli'
+  final String? clientMode; // 如 'ui', 'cli'
+  final String? platform; // 如 'android', 'ios'
+  final String? locale; // 如 'zh-CN', 'en-US'
 
   Server({
     required this.id,
@@ -61,6 +65,8 @@ class Server {
     this.deviceId,
     this.deviceName,
     this.deviceToken,
+    this.connectionMode = GatewayConnectionMode.sshTunnel,
+    this.gatewayUrl,
     // Client config
     this.clientId = 'openclaw-control-ui',
     this.clientMode = 'ui',
@@ -85,6 +91,8 @@ class Server {
     String? deviceId,
     String? deviceName,
     String? deviceToken,
+    GatewayConnectionMode connectionMode = GatewayConnectionMode.sshTunnel,
+    String? gatewayUrl,
   }) {
     return Server(
       id: id,
@@ -103,6 +111,8 @@ class Server {
       deviceId: deviceId,
       deviceName: deviceName,
       deviceToken: deviceToken,
+      connectionMode: connectionMode,
+      gatewayUrl: gatewayUrl,
     );
   }
 
@@ -149,6 +159,8 @@ class Server {
     String? deviceId,
     String? deviceName,
     String? deviceToken,
+    GatewayConnectionMode? connectionMode,
+    String? gatewayUrl,
   }) {
     return Server(
       id: id ?? this.id,
@@ -173,6 +185,8 @@ class Server {
       deviceId: deviceId ?? this.deviceId,
       deviceName: deviceName ?? this.deviceName,
       deviceToken: deviceToken ?? this.deviceToken,
+      connectionMode: connectionMode ?? this.connectionMode,
+      gatewayUrl: gatewayUrl ?? this.gatewayUrl,
     );
   }
 
@@ -201,6 +215,8 @@ class Server {
       'deviceId': deviceId,
       'deviceName': deviceName,
       'deviceToken': deviceToken,
+      'connectionMode': connectionMode.toString().split('.').last,
+      'gatewayUrl': gatewayUrl,
     };
   }
 
@@ -225,13 +241,18 @@ class Server {
       localPort: json['localPort'] as int? ?? 18789,
       remoteHost: json['remoteHost'] as String? ?? '127.0.0.1',
       gatewayToken: json['gatewayToken'] as String?,
-      clientId: 'openclaw-control-ui',  // 强制使用正确的 clientId
+      clientId: 'openclaw-control-ui', // 强制使用正确的 clientId
       clientMode: json['clientMode'] as String? ?? 'ui',
       platform: json['platform'] as String? ?? 'android',
       locale: json['locale'] as String? ?? 'zh-CN',
       deviceId: json['deviceId'] as String?,
       deviceName: json['deviceName'] as String?,
       deviceToken: json['deviceToken'] as String?,
+      connectionMode: GatewayConnectionMode.values.firstWhere(
+        (e) => e.toString().split('.').last == json['connectionMode'],
+        orElse: () => GatewayConnectionMode.sshTunnel,
+      ),
+      gatewayUrl: json['gatewayUrl'] as String?,
     );
   }
 }

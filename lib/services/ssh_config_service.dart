@@ -126,12 +126,26 @@ class SshConfigService {
       }
 
       final detectedToken = result['token']?.toString().trim() ?? '';
-      if (detectedToken.isNotEmpty) {
+      final bind =
+          (result['bind']?.toString().trim().toLowerCase() ?? 'loopback');
+      final wsReachable = bind != 'loopback';
+      final runtime = await _queryGatewayRuntime(
+        client: client,
+        gatewayPort: (result['port'] as num?)?.toInt() ?? 18789,
+      );
+      result['gatewayListening'] = runtime['hasListener'];
+      result['gatewayPublicListening'] = runtime['hasPublicListener'];
+      result['listenerAddresses'] = runtime['listenerAddresses'];
+      result['gatewayHandshakeOk'] = runtime['handshakeOk'];
+
+      if (detectedToken.isNotEmpty && wsReachable) {
         result['directGatewayUrl'] = 'ws://$host:${result['port'] ?? 18789}';
       }
       result['isDirectReady'] =
           detectedToken.isNotEmpty &&
-          result['bind'] == 'loopback' &&
+          wsReachable &&
+          runtime['hasPublicListener'] == true &&
+          runtime['handshakeOk'] == true &&
           result['allowInsecureAuth'] == true;
 
       return result;
@@ -299,30 +313,97 @@ class SshConfigService {
         auth: auth,
         controlUi: controlUi,
       );
-      if (existing['installed'] == true && trimmedDomain.isEmpty) {
+      final currentBind = (existing['bind'] as String?) ?? 'loopback';
+      final desiredBind = trimmedDomain.isEmpty ? 'lan' : 'loopback';
+      final needsBindUpgrade =
+          trimmedDomain.isEmpty && currentBind == 'loopback';
+      if (existing['installed'] == true &&
+          trimmedDomain.isEmpty &&
+          existing['wsReachable'] == true &&
+          !needsBindUpgrade) {
+        final verify = await _verifyGatewayRuntime(
+          client: client,
+          gatewayPort: gatewayPort,
+          requirePublicBind: true,
+          requireCaddy: false,
+        );
+        if (verify['ok'] == true) {
+          return {
+            'success': true,
+            'reused': true,
+            'mode': existing['mode'] ?? 'direct-ws',
+            'gatewayUrl': existing['gatewayUrl'],
+            'gatewayToken': existing['gatewayToken'],
+            'configPath': configPath,
+            'backupPath': null,
+            'verification': verify,
+            'note': '检测到服务器已完成直连部署，已直接复用现有配置',
+          };
+        }
+
+        final restarted = await _restartGatewayViaExistingSession(client);
+        if (restarted) {
+          final verifyAfterRestart = await _verifyGatewayRuntime(
+            client: client,
+            gatewayPort: gatewayPort,
+            requirePublicBind: true,
+            requireCaddy: false,
+          );
+          if (verifyAfterRestart['ok'] == true) {
+            return {
+              'success': true,
+              'reused': true,
+              'mode': existing['mode'] ?? 'direct-ws',
+              'gatewayUrl': existing['gatewayUrl'],
+              'gatewayToken': existing['gatewayToken'],
+              'configPath': configPath,
+              'backupPath': null,
+              'verification': verifyAfterRestart,
+              'note': '已复用既有部署，并自动重启 Gateway 修复运行态',
+            };
+          }
+          return {
+            'success': false,
+            'error':
+                '检测到已部署直连，但运行态异常：${_buildVerifyFailureHint(verifyAfterRestart)}',
+            'verification': verifyAfterRestart,
+          };
+        }
+
         return {
-          'success': true,
-          'reused': true,
-          'mode': existing['mode'] ?? 'direct-ws',
-          'gatewayUrl': existing['gatewayUrl'],
-          'gatewayToken': existing['gatewayToken'],
-          'configPath': configPath,
-          'backupPath': null,
-          'note': '检测到服务器已完成直连部署，已直接复用现有配置',
+          'success': false,
+          'error': '检测到已部署直连，但运行态异常：${_buildVerifyFailureHint(verify)}',
+          'verification': verify,
         };
       }
       if (existing['installed'] == true &&
           trimmedDomain.isNotEmpty &&
           existing['wssReadyForPreferredDomain'] == true) {
+        final verify = await _verifyGatewayRuntime(
+          client: client,
+          gatewayPort: gatewayPort,
+          requirePublicBind: false,
+          requireCaddy: true,
+        );
+        if (verify['ok'] == true) {
+          return {
+            'success': true,
+            'reused': true,
+            'mode': 'wss',
+            'gatewayUrl': 'wss://$trimmedDomain',
+            'gatewayToken': existing['gatewayToken'],
+            'configPath': configPath,
+            'backupPath': null,
+            'verification': verify,
+            'note': '检测到 $trimmedDomain 已部署 WSS，已直接复用',
+          };
+        }
+
         return {
-          'success': true,
-          'reused': true,
-          'mode': 'wss',
-          'gatewayUrl': 'wss://$trimmedDomain',
-          'gatewayToken': existing['gatewayToken'],
-          'configPath': configPath,
-          'backupPath': null,
-          'note': '检测到 $trimmedDomain 已部署 WSS，已直接复用',
+          'success': false,
+          'error':
+              '检测到 $trimmedDomain 已配置 WSS，但服务未就绪：${_buildVerifyFailureHint(verify)}',
+          'verification': verify,
         };
       }
 
@@ -336,11 +417,11 @@ class SshConfigService {
                 : _generateGatewayToken());
 
       String? backupPath;
-      if (!alreadyInstalled) {
+      if (!alreadyInstalled || needsBindUpgrade) {
         auth['mode'] = 'token';
         auth['token'] = token;
         gateway['auth'] = auth;
-        gateway['bind'] = 'loopback';
+        gateway['bind'] = desiredBind;
         gateway['port'] = gatewayPort;
 
         controlUi['allowedOrigins'] = ['*'];
@@ -375,6 +456,21 @@ class SshConfigService {
         );
 
         if (proxy['success'] == true) {
+          final verify = await _verifyGatewayRuntime(
+            client: client,
+            gatewayPort: gatewayPort,
+            requirePublicBind: false,
+            requireCaddy: true,
+          );
+          if (verify['ok'] != true) {
+            return {
+              'success': false,
+              'error': 'WSS 已配置，但验收未通过：${_buildVerifyFailureHint(verify)}',
+              'verification': verify,
+              'configPath': configPath,
+              'backupPath': backupPath,
+            };
+          }
           return {
             'success': true,
             'mode': 'wss',
@@ -383,7 +479,25 @@ class SshConfigService {
             'configPath': configPath,
             'backupPath': backupPath,
             'reused': alreadyInstalled,
+            'verification': verify,
             'note': '已部署 WSS 反向代理，移动端可直接直连',
+          };
+        }
+
+        final verifyFallback = await _verifyGatewayRuntime(
+          client: client,
+          gatewayPort: gatewayPort,
+          requirePublicBind: true,
+          requireCaddy: false,
+        );
+        if (verifyFallback['ok'] != true) {
+          return {
+            'success': false,
+            'error':
+                'WSS 配置失败且 WS 回退不可用：${_buildVerifyFailureHint(verifyFallback)}',
+            'verification': verifyFallback,
+            'configPath': configPath,
+            'backupPath': backupPath,
           };
         }
 
@@ -395,7 +509,24 @@ class SshConfigService {
           'configPath': configPath,
           'backupPath': backupPath,
           'reused': alreadyInstalled,
+          'verification': verifyFallback,
           'warning': proxy['error'] ?? 'WSS 部署失败，已回退到 WS 直连',
+        };
+      }
+
+      final verify = await _verifyGatewayRuntime(
+        client: client,
+        gatewayPort: gatewayPort,
+        requirePublicBind: true,
+        requireCaddy: false,
+      );
+      if (verify['ok'] != true) {
+        return {
+          'success': false,
+          'error': '直连部署完成，但验收未通过：${_buildVerifyFailureHint(verify)}',
+          'verification': verify,
+          'configPath': configPath,
+          'backupPath': backupPath,
         };
       }
 
@@ -407,6 +538,7 @@ class SshConfigService {
         'configPath': configPath,
         'backupPath': backupPath,
         'reused': alreadyInstalled,
+        'verification': verify,
         'note': '已启用直连模式（无 WSS），建议后续配置域名启用 TLS',
       };
     } catch (e) {
@@ -461,13 +593,14 @@ class SshConfigService {
     final hasWildcard = _hasWildcardOrigin(controlUi['allowedOrigins']);
 
     final installed =
-        token.isNotEmpty &&
-        mode == 'token' &&
-        bind == 'loopback' &&
-        allowInsecureAuth &&
-        hasWildcard;
+        token.isNotEmpty && mode == 'token' && allowInsecureAuth && hasWildcard;
     if (!installed) {
-      return {'installed': false, 'gatewayToken': token};
+      return {
+        'installed': false,
+        'gatewayToken': token,
+        'bind': bind,
+        'wsReachable': bind != 'loopback',
+      };
     }
 
     String? selectedWssDomain;
@@ -500,13 +633,17 @@ class SshConfigService {
 
     final gatewayUrl = selectedWssDomain != null
         ? 'wss://$selectedWssDomain'
-        : 'ws://$host:$gatewayPort';
+        : (bind == 'loopback' ? null : 'ws://$host:$gatewayPort');
     return {
       'installed': true,
-      'mode': selectedWssDomain != null ? 'wss' : 'direct-ws',
+      'mode': selectedWssDomain != null
+          ? 'wss'
+          : (bind == 'loopback' ? 'loopback-only' : 'direct-ws'),
       'gatewayUrl': gatewayUrl,
       'gatewayToken': token,
       'wssReadyForPreferredDomain': selectedWssDomain != null,
+      'bind': bind,
+      'wsReachable': bind != 'loopback',
     };
   }
 
@@ -547,6 +684,135 @@ class SshConfigService {
       }
     }
     return domains;
+  }
+
+  static Future<Map<String, dynamic>> _queryGatewayRuntime({
+    required SSHClient client,
+    required int gatewayPort,
+  }) async {
+    final listenRaw = await _executeCommand(
+      client,
+      '((command -v ss >/dev/null 2>&1 && ss -lnt) || '
+      '(command -v netstat >/dev/null 2>&1 && netstat -lnt) || true) 2>/dev/null',
+    );
+    final listenerAddresses = _extractListenerAddresses(listenRaw, gatewayPort);
+    final hasListener = listenerAddresses.isNotEmpty;
+    final hasPublicListener = listenerAddresses.any(
+      (addr) => !_isLoopbackAddress(addr),
+    );
+
+    final handshakeOut = await _executeCommand(
+      client,
+      'python3 - <<\'PY\' 2>/dev/null || echo PY_MISSING\n'
+      'import socket, base64, os\n'
+      'host = "127.0.0.1"\n'
+      'port = $gatewayPort\n'
+      'try:\n'
+      '    s = socket.create_connection((host, port), timeout=3)\n'
+      '    s.settimeout(3)\n'
+      '    key = base64.b64encode(os.urandom(16)).decode()\n'
+      '    req = f"GET / HTTP/1.1\\r\\nHost: {host}:{port}\\r\\nUpgrade: websocket\\r\\nConnection: Upgrade\\r\\nSec-WebSocket-Version: 13\\r\\nSec-WebSocket-Key: {key}\\r\\nOrigin: http://localhost\\r\\n\\r\\n"\n'
+      '    s.sendall(req.encode())\n'
+      '    data = s.recv(256)\n'
+      '    text = data.decode("latin1", "ignore")\n'
+      '    print("WS_OK" if "101" in text else "WS_BAD:" + text[:80])\n'
+      '    s.close()\n'
+      'except Exception as e:\n'
+      '    print("WS_FAIL:" + str(e))\n'
+      'PY',
+    );
+
+    final handshakeText = handshakeOut.trim();
+    final handshakeOk = handshakeText.startsWith('WS_OK');
+
+    return {
+      'hasListener': hasListener,
+      'hasPublicListener': hasPublicListener,
+      'listenerAddresses': listenerAddresses,
+      'handshakeOk': handshakeOk,
+      'handshakeOutput': handshakeText,
+    };
+  }
+
+  static Future<Map<String, dynamic>> _verifyGatewayRuntime({
+    required SSHClient client,
+    required int gatewayPort,
+    required bool requirePublicBind,
+    required bool requireCaddy,
+  }) async {
+    final runtime = await _queryGatewayRuntime(
+      client: client,
+      gatewayPort: gatewayPort,
+    );
+    var caddyActive = true;
+    if (requireCaddy) {
+      final caddyStatus = await _executeCommand(
+        client,
+        'systemctl is-active caddy 2>/dev/null || true',
+      );
+      caddyActive = caddyStatus.contains('active');
+    }
+
+    final hasListener = runtime['hasListener'] == true;
+    final hasPublic = runtime['hasPublicListener'] == true;
+    final handshakeOk = runtime['handshakeOk'] == true;
+
+    final ok =
+        hasListener &&
+        handshakeOk &&
+        (!requirePublicBind || hasPublic) &&
+        (!requireCaddy || caddyActive);
+
+    return {...runtime, 'caddyActive': caddyActive, 'ok': ok};
+  }
+
+  static String _buildVerifyFailureHint(Map<String, dynamic> verify) {
+    if (verify['hasListener'] != true) {
+      return 'Gateway 未监听端口，请检查 openclaw gateway 进程';
+    }
+    if (verify['hasPublicListener'] != true) {
+      return 'Gateway 仅监听 loopback，请确认 gateway.bind 非 loopback';
+    }
+    if (verify['handshakeOk'] != true) {
+      return 'WebSocket 握手失败，请查看网关日志并确认端口未被其他服务占用';
+    }
+    if (verify['caddyActive'] == false) {
+      return 'Caddy 未运行，请执行 systemctl restart caddy';
+    }
+    return '网络验收失败，请检查防火墙/安全组放行';
+  }
+
+  static List<String> _extractListenerAddresses(String text, int gatewayPort) {
+    final addresses = <String>{};
+    final lines = text.split('\n');
+    final pattern = RegExp(
+      r'([\[\]A-Za-z0-9*:.]+):' + gatewayPort.toString() + r'\b',
+    );
+    for (final raw in lines) {
+      final line = raw.trim();
+      if (line.isEmpty ||
+          (!line.contains('LISTEN') && !line.contains(':$gatewayPort'))) {
+        continue;
+      }
+      for (final match in pattern.allMatches(line)) {
+        var addr = (match.group(1) ?? '').trim();
+        if (addr.isEmpty) continue;
+        addr = addr.replaceAll('[', '').replaceAll(']', '');
+        if (addr == '*' || addr == '0.0.0.0' || addr == ':::') {
+          addr = '0.0.0.0';
+        }
+        addresses.add(addr);
+      }
+    }
+    return addresses.toList();
+  }
+
+  static bool _isLoopbackAddress(String address) {
+    final addr = address.trim().toLowerCase();
+    return addr == '127.0.0.1' ||
+        addr == 'localhost' ||
+        addr == '::1' ||
+        addr.startsWith('127.');
   }
 
   static Future<bool> _restartGatewayViaExistingSession(

@@ -98,6 +98,12 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
   }
 
   Widget _buildServerCard(Server server) {
+    final gatewayService = context.watch<GatewayService>();
+    final isConnectedServer =
+        gatewayService.isConnected &&
+        gatewayService.currentServer?.id == server.id;
+    final isSelectedServer = server.isActive;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -105,7 +111,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: server.isActive
+          color: isSelectedServer
               ? AppTheme.appleBlue.withValues(alpha: 0.5)
               : (Theme.of(context).dividerTheme.color ?? Colors.transparent),
         ),
@@ -119,7 +125,9 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                 width: 12,
                 height: 12,
                 decoration: BoxDecoration(
-                  color: server.isActive ? AppTheme.appleGreen : Colors.grey,
+                  color: isConnectedServer
+                      ? AppTheme.appleGreen
+                      : (isSelectedServer ? Colors.orange : Colors.grey),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -194,13 +202,16 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          if (!server.isActive)
+          if (!isConnectedServer)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () => _activateServer(server),
-                icon: const Icon(Icons.link, size: 18),
-                label: const Text('连接'),
+                icon: Icon(
+                  isSelectedServer ? Icons.refresh : Icons.link,
+                  size: 18,
+                ),
+                label: Text(isSelectedServer ? '重试连接' : '连接'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.appleBlue,
                   foregroundColor: Colors.white,
@@ -252,15 +263,6 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
   }
 
   Future<void> _activateServer(Server server) async {
-    setState(() {
-      servers = servers
-          .map((s) => s.copyWith(isActive: s.id == server.id))
-          .toList();
-    });
-
-    await _saveServers();
-    await SecureStorageService.saveActiveServerId(server.id);
-
     if (server.type == ServerType.openclaw) {
       final gatewayService = context.read<GatewayService>();
 
@@ -276,6 +278,14 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
 
       if (mounted) {
         if (success) {
+          setState(() {
+            servers = servers
+                .map((s) => s.copyWith(isActive: s.id == server.id))
+                .toList();
+          });
+          await _saveServers();
+          await SecureStorageService.saveActiveServerId(server.id);
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('✓ 已连接到: ${server.name}'),
@@ -1880,7 +1890,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                   gatewayUrlController.text.trim().isEmpty
                                   ? null
                                   : gatewayUrlController.text.trim(),
-                              isActive: true, // 新服务器默认设为活跃
+                              isActive: isEditing ? server.isActive : false,
                             );
 
                             setState(() {
@@ -1892,18 +1902,11 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                   servers[index] = newServer;
                                 }
                               } else {
-                                // 新服务器：取消其他服务器的活跃状态
-                                servers = servers
-                                    .map((s) => s.copyWith(isActive: false))
-                                    .toList();
                                 servers.add(newServer);
                               }
                             });
 
                             await _saveServers();
-                            await SecureStorageService.saveActiveServerId(
-                              newServer.id,
-                            );
 
                             if (mounted) {
                               Navigator.pop(context);

@@ -339,6 +339,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? AppTheme.darkBackground
+          : const Color(0xFFF4F6FA),
       resizeToAvoidBottomInset: true,
       drawer: Sidebar(onClose: () => _scaffoldKey.currentState?.closeDrawer()),
       appBar: _buildAppBar(l10n),
@@ -347,114 +350,129 @@ class _ChatScreenState extends State<ChatScreen> {
           // 连接状态指示器
           _buildConnectionStatus(),
           Expanded(
-            child: Consumer<ChatProvider>(
-              builder: (context, provider, child) {
-                final messageCount = provider.messages.length;
-                if (provider.isConnected != _lastConnected) {
-                  _lastConnected = provider.isConnected;
-                  if (_lastConnected && messageCount > 0) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _runSafeScrollAction(
-                        () => _scrollToBottom(animated: false),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: Theme.of(context).brightness == Brightness.dark
+                    ? const LinearGradient(
+                        colors: [Color(0xFF0F1114), Color(0xFF11161C)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      )
+                    : const LinearGradient(
+                        colors: [Color(0xFFF8FAFD), Color(0xFFF0F4F8)],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+              ),
+              child: Consumer<ChatProvider>(
+                builder: (context, provider, child) {
+                  final messageCount = provider.messages.length;
+                  if (provider.isConnected != _lastConnected) {
+                    _lastConnected = provider.isConnected;
+                    if (_lastConnected && messageCount > 0) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _runSafeScrollAction(
+                          () => _scrollToBottom(animated: false),
+                        );
+                      });
+                    }
+                  }
+
+                  _syncMessageKeys(messageCount);
+                  if (messageCount != _lastMessageCount) {
+                    final shouldAutoScroll =
+                        _lastMessageCount == 0 || _isNearBottom();
+                    _lastMessageCount = messageCount;
+                    if (shouldAutoScroll) {
+                      WidgetsBinding.instance.addPostFrameCallback(
+                        (_) => _runSafeScrollAction(
+                          () => _scrollToBottom(animated: false),
+                        ),
                       );
-                    });
+                    }
                   }
-                }
 
-                _syncMessageKeys(messageCount);
-                if (messageCount != _lastMessageCount) {
-                  final shouldAutoScroll =
-                      _lastMessageCount == 0 || _isNearBottom();
-                  _lastMessageCount = messageCount;
-                  if (shouldAutoScroll) {
-                    WidgetsBinding.instance.addPostFrameCallback(
-                      (_) => _runSafeScrollAction(
-                        () => _scrollToBottom(animated: false),
-                      ),
-                    );
+                  if (provider.messages.isEmpty) {
+                    return _buildEmptyState(l10n);
                   }
-                }
 
-                if (provider.messages.isEmpty) {
-                  return _buildEmptyState(l10n);
-                }
-
-                return Stack(
-                  children: [
-                    NotificationListener<ScrollNotification>(
-                      onNotification: _onScrollNotification,
-                      child: ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        itemCount: provider.messages.length,
-                        itemBuilder: (context, index) {
-                          return KeyedSubtree(
-                            key: _messageKeyForIndex(index),
-                            child: MessageBubble(
-                              message: provider.messages[index],
-                            ),
-                          );
-                        },
+                  return Stack(
+                    children: [
+                      NotificationListener<ScrollNotification>(
+                        onNotification: _onScrollNotification,
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          itemCount: provider.messages.length,
+                          itemBuilder: (context, index) {
+                            return KeyedSubtree(
+                              key: _messageKeyForIndex(index),
+                              child: MessageBubble(
+                                message: provider.messages[index],
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: IgnorePointer(
-                        ignoring: !_showScrollButtons,
-                        child: AnimatedOpacity(
-                          opacity: _showScrollButtons ? 1 : 0,
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOut,
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 10),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildScrollButton(
-                                  icon: Icons.vertical_align_top,
-                                  tooltip: '顶部',
-                                  onTap: () =>
-                                      _runSafeScrollAction(_scrollToTop),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildScrollButton(
-                                  icon: Icons.keyboard_arrow_up,
-                                  tooltip: '上一对话',
-                                  onTap: () => _runSafeScrollAction(
-                                    () => _jumpConversation(
-                                      messages: provider.messages,
-                                      forward: false,
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IgnorePointer(
+                          ignoring: !_showScrollButtons,
+                          child: AnimatedOpacity(
+                            opacity: _showScrollButtons ? 1 : 0,
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeOut,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 10),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildScrollButton(
+                                    icon: Icons.vertical_align_top,
+                                    tooltip: '顶部',
+                                    onTap: () =>
+                                        _runSafeScrollAction(_scrollToTop),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildScrollButton(
+                                    icon: Icons.keyboard_arrow_up,
+                                    tooltip: '上一对话',
+                                    onTap: () => _runSafeScrollAction(
+                                      () => _jumpConversation(
+                                        messages: provider.messages,
+                                        forward: false,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 22),
-                                _buildScrollButton(
-                                  icon: Icons.keyboard_arrow_down,
-                                  tooltip: '下一对话',
-                                  onTap: () => _runSafeScrollAction(
-                                    () => _jumpConversation(
-                                      messages: provider.messages,
-                                      forward: true,
+                                  const SizedBox(height: 22),
+                                  _buildScrollButton(
+                                    icon: Icons.keyboard_arrow_down,
+                                    tooltip: '下一对话',
+                                    onTap: () => _runSafeScrollAction(
+                                      () => _jumpConversation(
+                                        messages: provider.messages,
+                                        forward: true,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildScrollButton(
-                                  icon: Icons.vertical_align_bottom,
-                                  tooltip: '底部',
-                                  onTap: () => _runSafeScrollAction(
-                                    () => _scrollToBottom(animated: true),
+                                  const SizedBox(height: 8),
+                                  _buildScrollButton(
+                                    icon: Icons.vertical_align_bottom,
+                                    tooltip: '底部',
+                                    onTap: () => _runSafeScrollAction(
+                                      () => _scrollToBottom(animated: true),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           ),
           Consumer<ChatProvider>(

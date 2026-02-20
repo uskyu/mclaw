@@ -42,6 +42,20 @@ class MessageBubble extends StatelessWidget {
                 color: isUser
                     ? AppTheme.userBubble
                     : (isDark ? AppTheme.darkAiBubble : AppTheme.aiBubble),
+                border: Border.all(
+                  color: isUser
+                      ? Colors.white.withValues(alpha: 0.15)
+                      : (isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.05)),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(18),
                   topRight: const Radius.circular(18),

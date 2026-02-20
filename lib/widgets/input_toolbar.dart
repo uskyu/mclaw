@@ -29,23 +29,13 @@ class InputToolbar extends StatefulWidget {
 class _InputToolbarState extends State<InputToolbar>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const List<MapEntry<String, String>> _quickCommands = [
-    MapEntry('/help', '帮助'),
-    MapEntry('/commands', '全部指令'),
     MapEntry('/status', '状态'),
     MapEntry('/new', '重置当前会话'),
-    MapEntry('/reset', '重置会话'),
     MapEntry('/stop', '停止当前任务'),
-    MapEntry('/context list', '上下文列表'),
-    MapEntry('/context detail', '上下文详情'),
     MapEntry('/model', '模型菜单'),
-    MapEntry('/model list', '模型列表'),
-    MapEntry('/queue', '队列状态'),
-    MapEntry('/whoami', '身份信息'),
-    MapEntry('/think low', '低思考模式'),
-    MapEntry('/verbose off', '关闭详细输出'),
+    MapEntry('/help', '帮助'),
+    MapEntry('/commands', '更多指令'),
     MapEntry('/usage tokens', '用量摘要'),
-    MapEntry('/usage full', '用量完整'),
-    MapEntry('/usage off', '关闭用量'),
   ];
 
   final TextEditingController _controller = TextEditingController();
@@ -153,6 +143,130 @@ class _InputToolbarState extends State<InputToolbar>
     );
   }
 
+  void _showQuickCommandSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return SafeArea(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.06),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
+                  blurRadius: 22,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 34,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.appleGray.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.bolt_rounded,
+                      color: AppTheme.appleBlue,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      '快捷指令',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('关闭'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _quickCommands.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      color: Theme.of(context).dividerTheme.color,
+                    ),
+                    itemBuilder: (context, index) {
+                      final entry = _quickCommands[index];
+                      return ListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 2,
+                        ),
+                        title: Text(
+                          entry.value,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : AppTheme.appleLightGray.withValues(
+                                    alpha: 0.75,
+                                  ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            entry.key,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.color,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _sendMessage(entry.key);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -166,14 +280,24 @@ class _InputToolbarState extends State<InputToolbar>
       });
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         border: Border(
           top: BorderSide(
             color: Theme.of(context).dividerTheme.color ?? Colors.transparent,
           ),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 18,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: SafeArea(
         top: false,
@@ -182,7 +306,7 @@ class _InputToolbarState extends State<InputToolbar>
           children: [
             // 输入框
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
               child: Row(
                 children: [
                   Expanded(
@@ -190,8 +314,13 @@ class _InputToolbarState extends State<InputToolbar>
                       decoration: BoxDecoration(
                         color: Theme.of(context).brightness == Brightness.dark
                             ? AppTheme.darkSurface
-                            : AppTheme.appleLightGray,
-                        borderRadius: BorderRadius.circular(20),
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : AppTheme.appleLightGray,
+                        ),
                       ),
                       child: TextField(
                         controller: _controller,
@@ -221,7 +350,7 @@ class _InputToolbarState extends State<InputToolbar>
             ),
             // 工具栏按钮
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               child: Row(
                 children: [
                   _buildAgentButton(),
@@ -371,45 +500,20 @@ class _InputToolbarState extends State<InputToolbar>
   }
 
   Widget _buildQuickCommandButton() {
-    return PopupMenuButton<String>(
-      tooltip: '快捷指令',
-      onSelected: (command) => _sendMessage(command),
-      itemBuilder: (context) => _quickCommands
-          .map(
-            (entry) => PopupMenuItem<String>(
-              value: entry.key,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      entry.value,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    entry.key,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.appleGray,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-          .toList(),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return InkWell(
+      onTap: _showQuickCommandSheet,
+      borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? AppTheme.darkSurface
-              : AppTheme.appleLightGray,
-          borderRadius: BorderRadius.circular(8),
+          color: isDark ? AppTheme.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : AppTheme.appleLightGray,
+          ),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,

@@ -118,19 +118,6 @@ class _InputToolbarState extends State<InputToolbar>
     );
   }
 
-  void _showContextDrawer() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ContextDrawer(
-        usage: widget.contextUsage,
-        currentTokens: 2450,
-        maxTokens: 8000,
-      ),
-    );
-  }
-
   void _showQuickCommandSheet() {
     showModalBottomSheet(
       context: context,
@@ -357,20 +344,7 @@ class _InputToolbarState extends State<InputToolbar>
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
               child: (_isAttachmentExpanded && !isKeyboardVisible)
-                  ? AttachmentMenu(
-                      onCompressHistory: () {
-                        _toggleAttachmentMenu();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(l10n.compressHistory)),
-                        );
-                      },
-                      onClearContext: () {
-                        _toggleAttachmentMenu();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(l10n.clearContext)),
-                        );
-                      },
-                    )
+                  ? const AttachmentMenu()
                   : const SizedBox.shrink(),
             ),
           ],
@@ -421,36 +395,32 @@ class _InputToolbarState extends State<InputToolbar>
 
   Widget _buildContextButton() {
     final percentage = (widget.contextUsage * 100).toInt();
-    return InkWell(
-      onTap: _showContextDrawer,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                value: widget.contextUsage,
-                strokeWidth: 3,
-                backgroundColor: AppTheme.appleLightGray,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppTheme.appleBlue,
-                ),
+    return Container(
+      padding: const EdgeInsets.all(6),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              value: widget.contextUsage,
+              strokeWidth: 3,
+              backgroundColor: AppTheme.appleLightGray,
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppTheme.appleBlue,
               ),
             ),
-            Text(
-              '$percentage%',
-              style: const TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.appleBlue,
-              ),
+          ),
+          Text(
+            '$percentage%',
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.appleBlue,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -377,6 +377,27 @@ class _InputToolbarState extends State<InputToolbar>
     );
   }
 
+  void _showContextUsageHint() {
+    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isZh ? '上下文用量说明' : 'Context Usage Note'),
+        content: Text(
+          isZh
+              ? '官方暂未提供实时上下文用量接口，当前百分比仅会在每次状态查询时更新。'
+              : 'The official API does not provide real-time context usage. This percentage only updates when status is queried.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(isZh ? '知道了' : 'OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -601,32 +622,36 @@ class _InputToolbarState extends State<InputToolbar>
 
   Widget _buildContextButton() {
     final percentage = (widget.contextUsage * 100).toInt();
-    return Container(
-      padding: const EdgeInsets.all(6),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(
-              value: widget.contextUsage,
-              strokeWidth: 3,
-              backgroundColor: AppTheme.appleLightGray,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                AppTheme.appleBlue,
+    return InkWell(
+      onTap: _showContextUsageHint,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                value: widget.contextUsage,
+                strokeWidth: 3,
+                backgroundColor: AppTheme.appleLightGray,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AppTheme.appleBlue,
+                ),
               ),
             ),
-          ),
-          Text(
-            '$percentage%',
-            style: const TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.appleBlue,
+            Text(
+              '$percentage%',
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.appleBlue,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

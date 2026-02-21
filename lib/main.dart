@@ -25,14 +25,14 @@ class MyApp extends StatelessWidget {
           create: (context) => ChatProvider(
             gatewayService: context.read<GatewayService>(),
           ),
-          update: (context, gatewayService, previous) => 
+            update: (context, gatewayService, previous) => 
             previous ?? ChatProvider(gatewayService: gatewayService),
         ),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
-            title: 'Lobster Chat',
+            title: 'MClaw',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme(),
             darkTheme: AppTheme.darkTheme(),

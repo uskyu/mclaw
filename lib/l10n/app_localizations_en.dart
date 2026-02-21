@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Lobster Chat';
+  String get appTitle => 'MClaw';
 
   @override
   String get newChat => 'New Chat';
@@ -129,7 +129,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get thinking => 'Thinking...';
 
   @override
-  String get startConversation => 'Start a new conversation';
+  String get startConversation =>
+      'Connect to a server and send your first message';
 
   @override
   String get today => 'Today';

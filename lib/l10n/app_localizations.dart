@@ -101,7 +101,7 @@ abstract class AppLocalizations {
   /// Application title
   ///
   /// In en, this message translates to:
-  /// **'Lobster Chat'**
+  /// **'MClaw'**
   String get appTitle;
 
   /// New conversation button
@@ -341,7 +341,7 @@ abstract class AppLocalizations {
   /// Empty state subtitle
   ///
   /// In en, this message translates to:
-  /// **'Start a new conversation'**
+  /// **'Connect to a server and send your first message'**
   String get startConversation;
 
   /// Today timestamp

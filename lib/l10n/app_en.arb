@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "Lobster Chat",
+  "appTitle": "MClaw",
   "@appTitle": {
     "description": "Application title"
   },
@@ -160,7 +160,7 @@
   "@thinking": {
     "description": "AI thinking indicator"
   },
-  "startConversation": "Start a new conversation",
+  "startConversation": "Connect to a server and send your first message",
   "@startConversation": {
     "description": "Empty state subtitle"
   },

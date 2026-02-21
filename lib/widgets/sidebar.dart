@@ -7,6 +7,7 @@ import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
 import '../screens/server_management_screen.dart';
 import '../screens/settings_screen.dart';
+import 'app_logo.dart';
 
 class Sidebar extends StatelessWidget {
   final VoidCallback onClose;
@@ -41,20 +42,11 @@ class Sidebar extends StatelessWidget {
   Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppTheme.lobsterRed, AppTheme.lobsterOrange],
-              ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Center(
-              child: Text('🦞', style: TextStyle(fontSize: 20)),
-            ),
+        child: Row(
+          children: [
+          const AppLogo(
+            size: 40,
+            borderRadius: BorderRadius.all(Radius.circular(20)),
           ),
           const SizedBox(width: 12),
           Expanded(

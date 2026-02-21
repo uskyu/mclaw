@@ -10,6 +10,7 @@ import '../widgets/sidebar.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/input_toolbar.dart';
 import '../widgets/right_drawers.dart';
+import '../widgets/app_logo.dart';
 import '../providers/chat_provider.dart';
 import 'server_management_screen.dart';
 
@@ -828,7 +829,10 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
             child: const Center(
-              child: Text('🦞', style: TextStyle(fontSize: 40)),
+              child: AppLogo(
+                size: 80,
+                borderRadius: BorderRadius.all(Radius.circular(20)),
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -838,44 +842,10 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            '🦞 ${l10n.startConversation}',
+            l10n.startConversation,
             style: TextStyle(
               fontSize: 15,
               color: Theme.of(context).textTheme.bodySmall?.color,
-            ),
-          ),
-          const SizedBox(height: 32),
-          _buildExampleCard(l10n.generalAssistantDesc, Icons.psychology),
-          const SizedBox(height: 12),
-          _buildExampleCard(l10n.codeAssistantDesc, Icons.code),
-          const SizedBox(height: 12),
-          _buildExampleCard(l10n.writingAssistantDesc, Icons.edit),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExampleCard(String text, IconData icon) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 32),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Theme.of(context).dividerTheme.color ?? Colors.transparent,
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: AppTheme.appleBlue),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 15),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

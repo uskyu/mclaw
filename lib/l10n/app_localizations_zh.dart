@@ -9,7 +9,7 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get appTitle => '龙虾聊天';
+  String get appTitle => 'MClaw';
 
   @override
   String get newChat => '新对话';
@@ -129,7 +129,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get thinking => '思考中...';
 
   @override
-  String get startConversation => '开始一个新的对话吧';
+  String get startConversation => '连接服务器后，发送你的第一条消息';
 
   @override
   String get today => '今天';

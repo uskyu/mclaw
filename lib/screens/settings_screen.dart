@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/app_logo.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -86,9 +87,9 @@ class SettingsScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Center(
-          child: Text(
-            '🦞',
-            style: TextStyle(fontSize: 24),
+          child: AppLogo(
+            size: 50,
+            borderRadius: BorderRadius.all(Radius.circular(12)),
           ),
         ),
       ),

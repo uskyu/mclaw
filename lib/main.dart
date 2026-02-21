@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
+import 'providers/app_update_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/chat_provider.dart';
 import 'services/gateway_service.dart';
@@ -25,6 +26,7 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AppUpdateProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => GatewayService()),
         ChangeNotifierProxyProvider<GatewayService, ChatProvider>(
           create: (context) => ChatProvider(

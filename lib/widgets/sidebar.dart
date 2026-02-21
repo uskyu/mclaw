@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../models/message.dart';
+import '../providers/app_update_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/app_update_service.dart';
 import '../theme/app_theme.dart';
 import '../screens/server_management_screen.dart';
 import '../screens/settings_screen.dart';
@@ -70,9 +75,140 @@ class Sidebar extends StatelessWidget {
               ],
             ),
           ),
+          Consumer<AppUpdateProvider>(
+            builder: (context, updateProvider, child) {
+              return _buildUpdateButton(context, updateProvider);
+            },
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildUpdateButton(
+    BuildContext context,
+    AppUpdateProvider updateProvider,
+  ) {
+    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    return IconButton(
+      tooltip: isZh ? '检查更新' : 'Check updates',
+      onPressed: () => _showUpdateDialog(context),
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.system_update_alt_rounded, size: 22),
+          if (updateProvider.hasUpdate)
+            Positioned(
+              right: -1,
+              top: -1,
+              child: Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: AppTheme.appleRed,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showUpdateDialog(BuildContext context) {
+    final provider = context.read<AppUpdateProvider>();
+    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    unawaited(provider.checkForUpdates(forceRefresh: true));
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Consumer<AppUpdateProvider>(
+          builder: (context, updateProvider, child) {
+            final hasUpdate = updateProvider.hasUpdate;
+            final latest = updateProvider.latestVersion ?? '--';
+            final current = updateProvider.currentVersion;
+            return AlertDialog(
+              title: Text(isZh ? '版本更新' : 'Version Update'),
+              content: updateProvider.isChecking
+                  ? SizedBox(
+                      width: 240,
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(isZh ? '正在检查更新...' : 'Checking for updates...'),
+                        ],
+                      ),
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isZh
+                              ? '当前版本: $current\n最新版本: $latest'
+                              : 'Current: $current\nLatest: $latest',
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          hasUpdate
+                              ? (isZh ? '检测到新版本，可立即更新。' : 'A new version is available.')
+                              : (isZh ? '当前已是最新版本。' : 'You are on the latest version.'),
+                          style: TextStyle(
+                            color: hasUpdate ? AppTheme.appleBlue : AppTheme.appleGray,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+              actions: [
+                TextButton(
+                  onPressed: () => provider.checkForUpdates(forceRefresh: true),
+                  child: Text(isZh ? '重新检查' : 'Check Again'),
+                ),
+                if (hasUpdate)
+                  FilledButton(
+                    onPressed: () => _openUpdateLink(
+                      context,
+                      updateProvider.downloadUrl ?? AppUpdateService.releasePageUrl,
+                    ),
+                    child: Text(isZh ? '去更新' : 'Update'),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(isZh ? '关闭' : 'Close'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _openUpdateLink(BuildContext context, String url) async {
+    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final ok = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isZh
+                ? '无法打开更新地址，请稍后重试'
+                : 'Unable to open update link. Please try again later.',
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildSearchBar(BuildContext context, AppLocalizations l10n) {

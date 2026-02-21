@@ -11,6 +11,7 @@ import '../widgets/message_bubble.dart';
 import '../widgets/input_toolbar.dart';
 import '../widgets/right_drawers.dart';
 import '../widgets/app_logo.dart';
+import '../providers/app_update_provider.dart';
 import '../providers/chat_provider.dart';
 import '../services/background_runtime_service.dart';
 import '../services/notification_service.dart';
@@ -827,14 +828,42 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return AppBar(
       centerTitle: false,
       titleSpacing: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.menu),
-        onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+      leading: Consumer<AppUpdateProvider>(
+        builder: (context, updateProvider, child) {
+          return IconButton(
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.menu),
+                if (updateProvider.hasUpdate)
+                  Positioned(
+                    right: -1,
+                    top: -1,
+                    child: Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: AppTheme.appleRed,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          );
+        },
       ),
       title: Consumer<ChatProvider>(
         builder: (context, provider, child) {
+          final isZh = Localizations.localeOf(context).languageCode == 'zh';
+          final rawTitle = provider.currentConversationDisplayTitle;
+          final title = rawTitle == '主对话'
+              ? (isZh ? '主对话' : 'Main Conversation')
+              : rawTitle;
           return Text(
-            provider.currentConversationDisplayTitle,
+            title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           );
@@ -843,9 +872,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       actions: [
         Consumer<ChatProvider>(
           builder: (context, provider, child) {
+            final isZh = Localizations.localeOf(context).languageCode == 'zh';
             final isConnected = provider.isConnected;
             final isConnecting = provider.isConnecting;
-            final serverName = provider.currentServerName ?? '服务器';
+            final serverName =
+                provider.currentServerName ?? (isZh ? '服务器' : 'Server');
             final statusColor = isConnecting
                 ? Colors.orange
                 : isConnected

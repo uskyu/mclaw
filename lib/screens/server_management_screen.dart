@@ -344,7 +344,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('✗ 连接失败: $errorMsg'),
+                content: Text('✗ 连接失败: ${_redactEndpoint(errorMsg)}'),
                 backgroundColor: AppTheme.appleRed,
               ),
             );
@@ -362,6 +362,13 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
         lowerMsg.contains('not allowed') ||
         lowerMsg.contains('403') ||
         lowerMsg.contains('403');
+  }
+
+  String _redactEndpoint(String message) {
+    return message.replaceAll(
+      RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b'),
+      '[IP]',
+    );
   }
 
   /// 执行 CORS 自动修复
@@ -572,7 +579,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✗ 连接失败: $errorMsg'),
+              content: Text('✗ 连接失败: ${_redactEndpoint(errorMsg)}'),
               backgroundColor: AppTheme.appleRed,
             ),
           );
@@ -1118,7 +1125,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                 controller: sshHostController,
                                 decoration: InputDecoration(
                                   labelText: '服务器 IP 地址 *',
-                                  hintText: '例如：38.55.181.247',
+                                  hintText: '例如：203.0.113.10',
                                   prefixIcon: const Icon(
                                     Icons.computer_outlined,
                                   ),
@@ -1524,10 +1531,15 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                         );
                                       }
                                     } catch (e) {
+                                      final isZh =
+                                          Localizations.localeOf(context)
+                                              .languageCode ==
+                                          'zh';
                                       setDialogState(() {
                                         isDetecting = false;
-                                        detectionError =
-                                            '连接失败: ${e.toString()}';
+                                        detectionError = isZh
+                                            ? '连接失败，请检查网络、服务器地址和 SSH 端口是否可访问'
+                                            : 'Connection failed. Check network, server address, and SSH port accessibility';
                                       });
                                     }
                                   },

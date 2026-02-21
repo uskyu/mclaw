@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>MClaw Update</title>
+    <style>
+      :root {
+        --bg: #f4f6f8;
+        --card: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f62fe;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 0 16px;
+      }
+      .card {
+        background: var(--card);
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+      }
+      h1 { margin: 0 0 8px; font-size: 24px; }
+      .sub { margin: 0 0 20px; color: var(--muted); }
+      .section-title { font-weight: 700; margin: 16px 0 8px; }
+      .btn {
+        display: inline-block;
+        text-decoration: none;
+        background: var(--primary);
+        color: #fff;
+        padding: 10px 14px;
+        border-radius: 10px;
+        margin-right: 8px;
+        margin-bottom: 8px;
+      }
+      .note {
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      code {
+        background: #eef2ff;
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="card">
+        <h1>MClaw Update Center</h1>
+        <p class="sub">Download the latest Android package and view release notes.</p>
+
+        <div class="section-title">Latest Version</div>
+        <p>Version: <strong>1.0.0</strong></p>
+
+        <div class="section-title">Download</div>
+        <a class="btn" href="https://example.com/your-android-download-link" target="_blank" rel="noopener noreferrer">Download APK</a>
+        <a class="btn" href="https://example.com/your-backup-download-link" target="_blank" rel="noopener noreferrer">Backup Mirror</a>
+
+        <div class="section-title">Release Notes</div>
+        <ul>
+          <li>Replace these notes for each release.</li>
+          <li>Keep this page URL stable for in-app update jump.</li>
+        </ul>
+
+        <p class="note">
+          Tip: update <code>update.json</code> at the same time when publishing a new APK.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

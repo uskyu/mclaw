@@ -877,6 +877,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
 
   void _showServerDialog(AppLocalizations l10n, {Server? server}) {
     final isEditing = server != null;
+    final isZh = Localizations.localeOf(context).languageCode == 'zh';
 
     // Controllers - 设置默认值
     final nameController = TextEditingController(text: server?.name ?? '');
@@ -1834,117 +1835,156 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                       bottom: Radius.circular(28),
                     ),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(isZh ? '取消' : 'Cancel'),
                             ),
                           ),
-                          child: const Text('取消'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            // 验证必填项
-                            if (selectedConnectionMode ==
-                                    GatewayConnectionMode.sshTunnel &&
-                                sshHostController.text.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('请输入服务器 IP 地址')),
-                              );
-                              return;
-                            }
-
-                            if (selectedConnectionMode ==
-                                    GatewayConnectionMode.direct &&
-                                gatewayUrlController.text.trim().isEmpty &&
-                                sshHostController.text.trim().isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('请输入 Gateway URL 或服务器 IP 地址'),
-                                ),
-                              );
-                              return;
-                            }
-
-                            final newServer = Server.openclaw(
-                              id:
-                                  server?.id ??
-                                  DateTime.now().millisecondsSinceEpoch
-                                      .toString(),
-                              name: nameController.text.isEmpty
-                                  ? 'OpenClaw ${sshHostController.text.isNotEmpty ? sshHostController.text : gatewayUrlController.text}'
-                                  : nameController.text,
-                              sshHost: sshHostController.text.trim(),
-                              sshPort:
-                                  int.tryParse(sshPortController.text) ?? 22,
-                              sshUsername: sshUsernameController.text.trim(),
-                              sshPassword: sshPasswordController.text,
-                              remotePort:
-                                  int.tryParse(remotePortController.text) ??
-                                  18789,
-                              localPort:
-                                  int.tryParse(localPortController.text) ??
-                                  18789,
-                              gatewayToken: gatewayTokenController.text,
-                              deviceId: server?.deviceId,
-                              deviceName: server?.deviceName,
-                              deviceToken: server?.deviceToken,
-                              connectionMode: selectedConnectionMode,
-                              gatewayUrl:
-                                  gatewayUrlController.text.trim().isEmpty
-                                  ? null
-                                  : gatewayUrlController.text.trim(),
-                              isActive: isEditing ? server.isActive : false,
-                            );
-
-                            setState(() {
-                              if (isEditing) {
-                                final index = servers.indexWhere(
-                                  (s) => s.id == server.id,
-                                );
-                                if (index >= 0) {
-                                  servers[index] = newServer;
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                // 验证必填项
+                                if (selectedConnectionMode ==
+                                        GatewayConnectionMode.sshTunnel &&
+                                    sshHostController.text.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        isZh
+                                            ? '请输入服务器 IP 地址'
+                                            : 'Please enter server IP address',
+                                      ),
+                                    ),
+                                  );
+                                  return;
                                 }
-                              } else {
-                                servers.add(newServer);
-                              }
-                            });
 
-                            await _saveServers();
+                                if (selectedConnectionMode ==
+                                        GatewayConnectionMode.direct &&
+                                    gatewayUrlController.text.trim().isEmpty &&
+                                    sshHostController.text.trim().isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        isZh
+                                            ? '请输入 Gateway URL 或服务器 IP 地址'
+                                            : 'Please enter Gateway URL or server IP address',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
 
-                            if (mounted) {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    isEditing ? '✓ 服务器已更新' : '✓ 服务器已添加，正在连接...',
-                                  ),
-                                  backgroundColor: AppTheme.appleGreen,
+                                final newServer = Server.openclaw(
+                                  id:
+                                      server?.id ??
+                                      DateTime.now().millisecondsSinceEpoch
+                                          .toString(),
+                                  name: nameController.text.isEmpty
+                                      ? 'OpenClaw ${sshHostController.text.isNotEmpty ? sshHostController.text : gatewayUrlController.text}'
+                                      : nameController.text,
+                                  sshHost: sshHostController.text.trim(),
+                                  sshPort:
+                                      int.tryParse(sshPortController.text) ?? 22,
+                                  sshUsername: sshUsernameController.text.trim(),
+                                  sshPassword: sshPasswordController.text,
+                                  remotePort:
+                                      int.tryParse(remotePortController.text) ??
+                                      18789,
+                                  localPort:
+                                      int.tryParse(localPortController.text) ??
+                                      18789,
+                                  gatewayToken: gatewayTokenController.text,
+                                  deviceId: server?.deviceId,
+                                  deviceName: server?.deviceName,
+                                  deviceToken: server?.deviceToken,
+                                  connectionMode: selectedConnectionMode,
+                                  gatewayUrl:
+                                      gatewayUrlController.text.trim().isEmpty
+                                      ? null
+                                      : gatewayUrlController.text.trim(),
+                                  isActive: isEditing ? server.isActive : false,
+                                );
+
+                                setState(() {
+                                  if (isEditing) {
+                                    final index = servers.indexWhere(
+                                      (s) => s.id == server.id,
+                                    );
+                                    if (index >= 0) {
+                                      servers[index] = newServer;
+                                    }
+                                  } else {
+                                    servers.add(newServer);
+                                  }
+                                });
+
+                                await _saveServers();
+
+                                if (mounted) {
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        isEditing
+                                            ? (isZh
+                                                  ? '✓ 服务器已更新'
+                                                  : '✓ Server updated')
+                                            : (isZh
+                                                  ? '✓ 服务器已添加，正在连接...'
+                                                  : '✓ Server added, connecting...'),
+                                      ),
+                                      backgroundColor: AppTheme.appleGreen,
+                                    ),
+                                  );
+
+                                  // 自动连接
+                                  await _activateServer(newServer);
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.appleBlue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                              );
-
-                              // 自动连接
-                              await _activateServer(newServer);
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.appleBlue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                isEditing
+                                    ? (isZh ? '保存并连接' : 'Save & Connect')
+                                    : (isZh ? '添加并连接' : 'Add & Connect'),
+                              ),
                             ),
                           ),
-                          child: Text(isEditing ? '保存并连接' : '添加并连接'),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        isZh
+                            ? '提示：请开启通知权限并关闭省电管理，否则后台提醒可能延迟。'
+                            : 'Tip: Enable notifications and disable battery optimization, otherwise background alerts may be delayed.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppTheme.appleRed.withValues(alpha: 0.85),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],

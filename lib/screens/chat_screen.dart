@@ -116,11 +116,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               context: context,
               barrierDismissible: false,
               builder: (context) => AlertDialog(
-                title: Text(isZh ? '开启通知与后台运行' : 'Enable Notifications & Background'),
+                title: Text(
+                  isZh ? '通知权限请求' : 'Notification Permission',
+                ),
                 content: Text(
                   isZh
-                      ? 'MClaw 默认开启通知和后台运行。\n允许通知后，长任务完成会推送提醒。'
-                      : 'MClaw enables notifications and background runtime by default. Allow notifications to receive long-task completion alerts.',
+                      ? '为确保你在离开 App 后仍能收到任务完成提醒，请允许通知权限。'
+                      : 'To receive task completion alerts after leaving the app, please allow notification permission.',
                 ),
                 actions: [
                   TextButton(
@@ -129,18 +131,43 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   ),
                   FilledButton(
                     onPressed: () => Navigator.pop(context, true),
-                    child: Text(isZh ? '允许并开启' : 'Allow & Enable'),
+                    child: Text(isZh ? '允许通知' : 'Allow'),
                   ),
                 ],
               ),
             ) ??
         false;
 
+    if (mounted && backgroundEnabled) {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Text(
+            isZh ? '省电管理提醒' : 'Battery Optimization Notice',
+          ),
+          content: Text(
+            isZh
+                ? '请在系统设置中关闭 MClaw 的省电限制/电池优化，否则后台任务提醒可能延迟或丢失。'
+                : 'Please disable battery optimization for MClaw in system settings, otherwise background task alerts may be delayed or missed.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(isZh ? '我知道了' : 'Got it'),
+            ),
+          ],
+        ),
+      );
+    }
+
     await SecureStorageService.saveRuntimePermissionPrompted(true);
 
     if (!accepted) {
       await SecureStorageService.saveNotificationsEnabled(false);
-      await SecureStorageService.saveBackgroundRunningEnabled(false);
+      if (backgroundEnabled) {
+        await BackgroundRuntimeService.instance.enable();
+      }
       return;
     }
 
@@ -153,7 +180,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       return;
     }
 
-    if (backgroundEnabled && granted) {
+    if (backgroundEnabled) {
       await BackgroundRuntimeService.instance.enable();
     }
 

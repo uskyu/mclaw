@@ -42,6 +42,7 @@ dependencies:
   image_picker: ^1.1.2
   file_picker: ^8.0.7
   path: ^1.9.0
+  url_launcher: ^6.3.1
   
   # For background service (notifications)
   flutter_background_service: ^5.0.6

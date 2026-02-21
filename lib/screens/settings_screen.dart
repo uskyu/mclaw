@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/theme_provider.dart';
@@ -74,6 +76,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await BackgroundRuntimeService.instance.enable();
     } else {
       await BackgroundRuntimeService.instance.disable();
+    }
+  }
+
+  Future<void> _copyRepoUrl() async {
+    await Clipboard.setData(const ClipboardData(text: _repoUrl));
+    if (!mounted) {
+      return;
+    }
+    final isZh = _isZh(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isZh ? '项目地址已复制' : 'Repository URL copied'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  Future<void> _openRepoUrl() async {
+    final uri = Uri.parse(_repoUrl);
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      final isZh = _isZh(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isZh ? '无法打开链接，请手动复制访问' : 'Unable to open link. Please copy and open manually.',
+          ),
+        ),
+      );
     }
   }
 
@@ -207,11 +238,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildNotificationsTile(BuildContext context, AppLocalizations l10n) {
-    return SwitchListTile(
-      secondary: const Icon(Icons.notifications_outlined, color: AppTheme.appleGray),
+    final isZh = _isZh(context);
+    return ListTile(
+      leading: const Icon(Icons.notifications_outlined, color: AppTheme.appleGray),
       title: Text(l10n.notifications),
-      value: _notificationsEnabled,
-      onChanged: (value) => _setNotificationsEnabled(value),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: isZh ? '通知权限说明' : 'Notification permission help',
+            icon: const Icon(
+              Icons.help_outline,
+              size: 20,
+              color: AppTheme.appleGray,
+            ),
+            onPressed: () => _showNotificationHelpDialog(context, isZh),
+          ),
+          Switch(
+            value: _notificationsEnabled,
+            onChanged: (value) => _setNotificationsEnabled(value),
+          ),
+        ],
+      ),
     );
   }
 
@@ -260,6 +308,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _showNotificationHelpDialog(BuildContext context, bool isZh) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isZh ? '通知接收说明' : 'Notification Requirements'),
+        content: Text(
+          isZh
+              ? '为确保及时收到任务完成提醒，请开启：\n1. 系统通知权限\n2. MClaw 的通知横幅/弹窗\n3. 允许后台运行（建议关闭电池优化）'
+              : 'To reliably receive task completion alerts, enable:\n1. System notification permission\n2. Banner/pop-up notifications for MClaw\n3. Background running (battery optimization off is recommended)',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(isZh ? '知道了' : 'OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showAboutDialog(BuildContext context, bool isZh) {
     showDialog(
       context: context,
@@ -267,10 +335,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: Text(isZh ? '关于开发者' : 'About Developer'),
         content: Text(
           isZh
-              ? '应用名称: MClaw\n版本: 1.0.0\n开发者: uskyu\n定位: 面向 OpenClaw 的移动端客户端。'
-              : 'App: MClaw\nVersion: 1.0.0\nDeveloper: uskyu\nPositioning: A mobile client for OpenClaw.',
+              ? '应用名称: MClaw\n版本: 1.0.0\n开发者: uskyu\n定位: 面向 OpenClaw 的移动端客户端。\n\n项目地址:\n$_repoUrl'
+              : 'App: MClaw\nVersion: 1.0.0\nDeveloper: uskyu\nPositioning: A mobile client for OpenClaw.\n\nProject URL:\n$_repoUrl',
         ),
         actions: [
+          TextButton(
+            onPressed: _copyRepoUrl,
+            child: Text(isZh ? '复制链接' : 'Copy Link'),
+          ),
+          TextButton(
+            onPressed: _openRepoUrl,
+            child: Text(isZh ? '打开链接' : 'Open Link'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(isZh ? '关闭' : 'Close'),

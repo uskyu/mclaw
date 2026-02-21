@@ -604,8 +604,8 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                   Icons.rocket_launch,
                   color: AppTheme.appleBlue,
                 ),
-                title: const Text('一键部署直连（WSS 推荐）'),
-                subtitle: const Text('首次通过 SSH 部署，推荐启用 WSS 直连'),
+                title: const Text('一键部署直连（无需域名）'),
+                subtitle: const Text('点击后立即开始部署并切换直连模式'),
                 onTap: () async {
                   Navigator.pop(context);
                   await _deployDirectAccess(server);
@@ -671,44 +671,6 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
       return;
     }
 
-    final domainController = TextEditingController();
-    final shouldDeploy = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('一键部署直连模式（推荐 WSS）'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('可选填入域名以自动配置 WSS（推荐）；留空则使用 WS 直连。'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: domainController,
-              decoration: const InputDecoration(
-                labelText: '域名（可选）',
-                hintText: '例如: gateway.example.com',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('开始部署'),
-          ),
-        ],
-      ),
-    );
-
-    if (shouldDeploy != true) {
-      return;
-    }
-
     if (!mounted) return;
     showDialog(
       context: context,
@@ -722,9 +684,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
       username: server.sshUsername!,
       password: server.sshPassword ?? '',
       gatewayPort: server.remotePort ?? 18789,
-      publicDomain: domainController.text.trim().isEmpty
-          ? null
-          : domainController.text.trim(),
+      publicDomain: null,
     );
 
     if (mounted) Navigator.pop(context);
@@ -1592,38 +1552,6 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                       return;
                                     }
 
-                                    final domainController =
-                                        TextEditingController();
-                                    final deploy = await showDialog<bool>(
-                                      context: context,
-                                      builder: (context) => AlertDialog(
-                                        title: const Text('一键部署直连模式（推荐 WSS）'),
-                                        content: TextField(
-                                          controller: domainController,
-                                          decoration: const InputDecoration(
-                                            labelText: '域名（可选）',
-                                            hintText: 'gateway.example.com',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, false),
-                                            child: const Text('取消'),
-                                          ),
-                                          ElevatedButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, true),
-                                            child: const Text('开始部署'),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                    if (deploy != true) {
-                                      return;
-                                    }
-
                                     setDialogState(() {
                                       isDetecting = true;
                                       detectionError = null;
@@ -1645,12 +1573,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                                 remotePortController.text,
                                               ) ??
                                               18789,
-                                          publicDomain:
-                                              domainController.text
-                                                  .trim()
-                                                  .isEmpty
-                                              ? null
-                                              : domainController.text.trim(),
+                                          publicDomain: null,
                                         );
 
                                     setDialogState(() {
@@ -1698,7 +1621,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                     }
                                   },
                             icon: const Icon(Icons.rocket_launch),
-                            label: const Text('一键部署直连（WSS 推荐）'),
+                            label: const Text('一键部署直连（无需域名）'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppTheme.appleBlue,
                               side: const BorderSide(color: AppTheme.appleBlue),

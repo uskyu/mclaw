@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../models/chat_attachment.dart';
 import '../models/message.dart';
@@ -364,14 +365,18 @@ class ChatProvider with ChangeNotifier {
       return;
     }
 
+    final preferredLocale = await SecureStorageService.loadLocaleCode();
+    final localeCode = preferredLocale ?? PlatformDispatcher.instance.locale.languageCode;
+    final isZh = localeCode.toLowerCase().startsWith('zh');
+
     final normalized = content.replaceAll(RegExp(r'\s+'), ' ').trim();
     final preview = normalized.isEmpty
-        ? '任务已完成'
+        ? (isZh ? '任务已完成' : 'Task completed')
         : (normalized.length > 90
               ? '${normalized.substring(0, 90)}...'
               : normalized);
     await NotificationService.instance.showTaskCompletedNotification(
-      title: 'MClaw 任务已完成',
+      title: isZh ? 'MClaw 任务已完成' : 'MClaw Task Completed',
       body: preview,
     );
   }

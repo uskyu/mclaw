@@ -1,50 +1,53 @@
-# ClawChat App
+# MClaw App
 
 > Language: **English** | [简体中文](./README.zh-CN.md)
 
-A Flutter OpenClaw chat client (Android-first) that connects to OpenClaw Gateway via **SSH tunnel** or **direct WS/WSS**.
+MClaw is an Android-first Flutter client for OpenClaw Gateway, supporting both **SSH tunnel** and **direct WS/WSS** access.
 
-## 1) Goals
+## 1) What It Does
 
-- Deliver a ChatGPT-like mobile chat experience.
-- Keep OpenClaw integration stable (connect, handshake, streaming, history, sessions).
-- Reduce ops burden with auto-detect, auto-fix, and one-click direct deployment.
+- Chat with OpenClaw through real Gateway protocol flow
+- Manage servers/sessions on mobile
+- Run with either:
+  - `sshTunnel` (forward local port to remote Gateway)
+  - `direct` (`ws://` / `wss://`)
 
-## 2) Implemented Features
+## 2) Current Feature Set
 
-- Connection modes
-  - SSH tunnel (local forward to remote Gateway)
-  - Direct mode (`ws://` / `wss://`)
-- Gateway protocol support
+- Protocol and chat
   - `connect.challenge -> connect -> hello-ok`
-  - `chat.send`, `chat.history`
+  - `chat.send`, `chat.history`, `chat.abort`
   - `sessions.list`, `sessions.patch`, `sessions.delete`
-  - `health`
-  - Streaming event handling for `chat` / `agent`
+  - streaming updates from `chat` + `agent`
 - Chat UX
-  - Streaming output, loading state, error state
-  - Session list, switching, and new session
-  - Local-only conversation notes
-  - Last session restore per server
+  - true streaming display + auto-follow while generating
+  - stable markdown: text constrained in bubble, table horizontal scroll
+  - stream-time plain-text rendering, final markdown rendering
+  - message outline (latest-first)
 - Input and attachments
-  - Quick commands (e.g. `/status`, `/new`, `/stop`, `/model`)
-  - Image attachments (camera/gallery/file picker)
-  - Limits: max 3 images, ~4.8MB per image, image type only
-- Markdown rendering
-  - Regular text stays constrained inside bubble
-  - Tables can scroll horizontally
-  - Copy button for code blocks
-- Server maintenance tools
-  - Auto-detect Gateway config
-  - Auto-fix `controlUi.allowedOrigins` + `allowInsecureAuth`
-  - Restart Gateway
-  - One-click direct deployment (optional Caddy + WSS)
+  - quick command panel
+  - camera/gallery image sending
+  - file entry is kept but marked as “under development”
+  - limits: up to 3 images, ~4.8MB each
+- Server ops
+  - auto detect/fix Gateway config
+  - one-click direct deployment (WSS recommended)
+  - Gateway restart + remote history cleanup
+- Android runtime
+  - notification + background runtime onboarding
+  - foreground service keep-alive option
+  - local notification when long AI task completes in background
+- Localization and settings
+  - default follows system language (`zh`/`en`)
+  - manual language override with persistence
+  - privacy/about/help dialogs (project URL copy/open supported)
 
-## 3) Important Protocol Notes
+## 3) Important Notes
 
-- If Gateway does not enable `allowInsecureAuth: true`, you may connect but still miss write permission (e.g. `missing scope: operator.write`).
-- Session management APIs (`sessions.patch` / `sessions.delete`) typically require `operator.admin` scope.
-- Stream completion may come from `done` or `agent lifecycle end`; client handles both.
+- Without `allowInsecureAuth: true`, you may connect but still miss write scope (`missing scope: operator.write`).
+- Session mutation APIs usually require `operator.admin` (`sessions.patch` / `sessions.delete`).
+- Stream completion can come from both `done` and `agent lifecycle end`.
+- Connection mode is selected explicitly (`direct` vs `sshTunnel`), not auto-fallback.
 
 Recommended Gateway snippet (`~/.openclaw/openclaw.json`):
 
@@ -71,10 +74,6 @@ systemctl restart openclaw
 lib/
 ├── main.dart
 ├── models/
-│   ├── server.dart
-│   ├── message.dart
-│   ├── chat_attachment.dart
-│   └── agent.dart
 ├── providers/
 │   ├── chat_provider.dart
 │   └── theme_provider.dart
@@ -83,7 +82,9 @@ lib/
 │   ├── gateway_protocol_service.dart
 │   ├── ssh_tunnel_service.dart
 │   ├── ssh_config_service.dart
-│   └── secure_storage_service.dart
+│   ├── secure_storage_service.dart
+│   ├── notification_service.dart
+│   └── background_runtime_service.dart
 ├── screens/
 │   ├── chat_screen.dart
 │   ├── server_management_screen.dart
@@ -93,73 +94,39 @@ lib/
 │   ├── input_toolbar.dart
 │   ├── sidebar.dart
 │   ├── attachment_menu.dart
-│   └── right_drawers.dart
+│   ├── right_drawers.dart
+│   └── app_logo.dart
 └── theme/
     └── app_theme.dart
 ```
 
-## 5) Core Data Flow
+## 5) Storage (Secure)
 
-1. UI calls `ChatProvider.sendMessage()`.
-2. `GatewayService.sendMessage()` forwards to protocol layer `chat.send`.
-3. Gateway returns `runId`, then streams updates via `chat` / `agent` events.
-4. `ChatProvider` merges chunks and updates message/session state.
+`flutter_secure_storage` stores:
 
-## 6) Local Secure Storage
+- server list and active server
+- last session key per server
+- local conversation notes
+- theme mode
+- locale override
+- notifications/background toggles
 
-Using `flutter_secure_storage` for:
-
-- Server list (including token and connection config)
-- Active server ID
-- Local conversation notes
-- Last session key per server
-
-## 7) Development
-
-### Requirements
-
-- Flutter SDK (Dart 3.9+)
-- Android Studio / Android SDK
-
-### Run
+## 6) Run and Check
 
 ```bash
 flutter pub get
 flutter run
-```
-
-### Check
-
-```bash
 flutter analyze
 ```
 
-## 8) Recommended Usage Flow
+## 7) Known Limitations
 
-1. Open Server Management and add a server (IP + SSH password + token).
-2. Run "Auto detect Gateway config".
-3. If issues are found, run "Auto fix" and restart Gateway.
-4. Return to chat page and confirm online status.
+- Attachments are image-only in current `chat.send` path.
+- History image thumbnails rely on local paths (cross-device restore is limited).
+- Context usage has no official real-time API; UI updates on status query.
+- `flutter_markdown` is discontinued; migration to `flutter_markdown_plus` is planned.
 
-## 9) Tooling Scripts
-
-- `tool/openclaw_bootstrap_direct.sh`: one-click remote direct deployment (optional WSS).
-- `tool/probe_transports.dart`: validate direct and SSH-tunnel transport paths.
-- See `tool/README_DIRECT_SETUP.md` for details.
-
-## 10) Known Limitations
-
-- Attachment sending currently supports images only.
-- History image thumbnails mainly rely on local paths and cannot be fully restored across devices/reinstall.
-- `flutter_markdown` is discontinued; migrate to `flutter_markdown_plus` for long-term compatibility.
-
-## 11) Next Suggestions
-
-- Migrate to `flutter_markdown_plus`.
-- Further refine block-level rendering behavior (table/code-only horizontal scroll).
-- Add reconnect and unstable-network recovery strategy.
-
-## 12) References
+## 8) References
 
 - OpenClaw Docs: https://docs.openclaw.ai/
 - Gateway Protocol: https://docs.openclaw.ai/gateway/protocol

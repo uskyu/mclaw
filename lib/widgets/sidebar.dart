@@ -388,9 +388,12 @@ class Sidebar extends StatelessWidget {
           Consumer<ThemeProvider>(
             builder: (context, themeProvider, child) {
               final isDark = themeProvider.isDarkMode;
+              final isZh = Localizations.localeOf(context).languageCode == 'zh';
               return _buildActionButton(
                 isDark ? Icons.light_mode : Icons.dark_mode,
-                isDark ? '浅色' : '深色',
+                isDark
+                    ? (isZh ? '浅色' : 'Light')
+                    : (isZh ? '深色' : 'Dark'),
                 () => themeProvider.toggleTheme(),
               );
             },

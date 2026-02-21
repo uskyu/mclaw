@@ -6,14 +6,15 @@ import '../services/secure_storage_service.dart';
 
 class ThemeProvider with ChangeNotifier {
   bool _isDarkMode = false;
-  Locale _locale = const Locale('zh'); // 默认中文
+  Locale? _locale;
 
   ThemeProvider() {
     _loadSavedThemeMode();
+    _loadSavedLocale();
   }
 
   bool get isDarkMode => _isDarkMode;
-  Locale get locale => _locale;
+  Locale? get locale => _locale;
   ThemeMode get themeMode => _isDarkMode ? ThemeMode.dark : ThemeMode.light;
 
   void toggleTheme() {
@@ -32,12 +33,19 @@ class ThemeProvider with ChangeNotifier {
   }
 
   void setLocale(Locale locale) {
+    if (_locale?.languageCode == locale.languageCode) {
+      return;
+    }
     _locale = locale;
+    unawaited(SecureStorageService.saveLocaleCode(locale.languageCode));
     notifyListeners();
   }
 
-  void toggleLocale() {
-    _locale = _locale.languageCode == 'zh' ? const Locale('en') : const Locale('zh');
+  void toggleLocale(Locale fallbackLocale) {
+    final currentCode = (_locale ?? fallbackLocale).languageCode;
+    final next = currentCode == 'zh' ? const Locale('en') : const Locale('zh');
+    _locale = next;
+    unawaited(SecureStorageService.saveLocaleCode(next.languageCode));
     notifyListeners();
   }
 
@@ -55,6 +63,17 @@ class ThemeProvider with ChangeNotifier {
   Future<void> _persistThemeMode() async {
     try {
       await SecureStorageService.saveThemeDarkMode(_isDarkMode);
+    } catch (_) {}
+  }
+
+  Future<void> _loadSavedLocale() async {
+    try {
+      final saved = await SecureStorageService.loadLocaleCode();
+      if (saved == null || (saved != 'zh' && saved != 'en')) {
+        return;
+      }
+      _locale = Locale(saved);
+      notifyListeners();
     } catch (_) {}
   }
 }

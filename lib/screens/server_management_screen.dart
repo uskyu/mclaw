@@ -596,8 +596,8 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                   Icons.rocket_launch,
                   color: AppTheme.appleBlue,
                 ),
-                title: const Text('一键部署直连（WSS 可选）'),
-                subtitle: const Text('首次通过 SSH 部署，后续可直接连接'),
+                title: const Text('一键部署直连（WSS 推荐）'),
+                subtitle: const Text('首次通过 SSH 部署，推荐启用 WSS 直连'),
                 onTap: () async {
                   Navigator.pop(context);
                   await _deployDirectAccess(server);
@@ -667,12 +667,12 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
     final shouldDeploy = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('一键部署直连模式'),
+        title: const Text('一键部署直连模式（推荐 WSS）'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('可选填入域名以自动配置 WSS；留空则使用 WS 直连。'),
+            const Text('可选填入域名以自动配置 WSS（推荐）；留空则使用 WS 直连。'),
             const SizedBox(height: 12),
             TextField(
               controller: domainController,
@@ -1583,7 +1583,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                     final deploy = await showDialog<bool>(
                                       context: context,
                                       builder: (context) => AlertDialog(
-                                        title: const Text('一键部署直连模式'),
+                                        title: const Text('一键部署直连模式（推荐 WSS）'),
                                         content: TextField(
                                           controller: domainController,
                                           decoration: const InputDecoration(
@@ -1684,7 +1684,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
                                     }
                                   },
                             icon: const Icon(Icons.rocket_launch),
-                            label: const Text('一键部署直连（WSS 可选）'),
+                            label: const Text('一键部署直连（WSS 推荐）'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppTheme.appleBlue,
                               side: const BorderSide(color: AppTheme.appleBlue),

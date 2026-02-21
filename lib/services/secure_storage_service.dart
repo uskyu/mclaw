@@ -15,6 +15,7 @@ class SecureStorageService {
   static const _conversationNotesKey = 'conversation_notes';
   static const _lastSessionByServerKey = 'last_session_by_server';
   static const _themeDarkModeKey = 'theme_dark_mode';
+  static const _localeCodeKey = 'locale_code';
   static const _notificationsEnabledKey = 'notifications_enabled';
   static const _backgroundRunningEnabledKey = 'background_running_enabled';
   static const _runtimePermissionPromptedKey = 'runtime_permission_prompted';
@@ -165,6 +166,22 @@ class SecureStorageService {
       return false;
     }
     return null;
+  }
+
+  static Future<void> saveLocaleCode(String code) async {
+    await _storage.write(key: _localeCodeKey, value: code);
+  }
+
+  static Future<String?> loadLocaleCode() async {
+    final value = await _storage.read(key: _localeCodeKey);
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  static Future<void> clearLocaleCode() async {
+    await _storage.delete(key: _localeCodeKey);
   }
 
   static Future<void> saveNotificationsEnabled(bool enabled) async {

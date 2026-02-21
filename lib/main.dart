@@ -53,6 +53,15 @@ class MyApp extends StatelessWidget {
               Locale('en'),
               Locale('zh'),
             ],
+            localeResolutionCallback: (locale, supportedLocales) {
+              if (locale == null) {
+                return const Locale('en');
+              }
+              if (locale.languageCode == 'zh') {
+                return const Locale('zh');
+              }
+              return const Locale('en');
+            },
             home: const ChatScreen(),
           );
         },

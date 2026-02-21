@@ -846,11 +846,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             final isConnected = provider.isConnected;
             final isConnecting = provider.isConnecting;
             final serverName = provider.currentServerName ?? '服务器';
-            final statusText = isConnecting
-                ? '连接中'
-                : isConnected
-                ? l10n.online
-                : '离线';
             final statusColor = isConnecting
                 ? Colors.orange
                 : isConnected
@@ -911,15 +906,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       decoration: BoxDecoration(
                         color: statusColor,
                         shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      statusText,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],

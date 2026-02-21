@@ -35,15 +35,6 @@ class _InputToolbarState extends State<InputToolbar>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const int _maxAttachmentBytes = 4_800_000;
   static const int _maxAttachmentCount = 3;
-  static const List<MapEntry<String, String>> _quickCommands = [
-    MapEntry('/status', '状态'),
-    MapEntry('/new', '重置当前会话'),
-    MapEntry('/stop', '停止当前任务'),
-    MapEntry('/model', '模型菜单'),
-    MapEntry('/help', '帮助'),
-    MapEntry('/commands', '更多指令'),
-    MapEntry('/usage tokens', '用量摘要'),
-  ];
 
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
@@ -124,6 +115,31 @@ class _InputToolbarState extends State<InputToolbar>
     );
   }
 
+  bool _isZhLocale() => Localizations.localeOf(context).languageCode == 'zh';
+
+  List<MapEntry<String, String>> _quickCommands(bool isZh) {
+    if (isZh) {
+      return const [
+        MapEntry('/status', '状态'),
+        MapEntry('/new', '重置当前会话'),
+        MapEntry('/stop', '停止当前任务'),
+        MapEntry('/model', '模型菜单'),
+        MapEntry('/help', '帮助'),
+        MapEntry('/commands', '更多指令'),
+        MapEntry('/usage tokens', '用量摘要'),
+      ];
+    }
+    return const [
+      MapEntry('/status', 'Status'),
+      MapEntry('/new', 'Reset current session'),
+      MapEntry('/stop', 'Stop current task'),
+      MapEntry('/model', 'Model menu'),
+      MapEntry('/help', 'Help'),
+      MapEntry('/commands', 'More commands'),
+      MapEntry('/usage tokens', 'Usage summary'),
+    ];
+  }
+
   String _mimeFromFileName(String fileName) {
     final ext = p.extension(fileName).toLowerCase().replaceFirst('.', '');
     switch (ext) {
@@ -147,31 +163,42 @@ class _InputToolbarState extends State<InputToolbar>
   }
 
   Future<void> _tryAddAttachmentFromPath(String path) async {
+    final isZh = _isZhLocale();
     final file = File(path);
     if (!await file.exists()) {
-      _showToast('文件不存在');
+      _showToast(isZh ? '文件不存在' : 'File does not exist');
       return;
     }
 
     final fileName = p.basename(path);
     final mimeType = _mimeFromFileName(fileName);
     if (!mimeType.startsWith('image/')) {
-      _showToast('当前版本仅支持图片附件');
+      _showToast(
+        isZh ? '当前版本仅支持图片附件' : 'Only image attachments are supported',
+      );
       return;
     }
 
     final bytes = await file.readAsBytes();
     if (bytes.isEmpty) {
-      _showToast('文件为空，无法发送');
+      _showToast(isZh ? '文件为空，无法发送' : 'File is empty and cannot be sent');
       return;
     }
     if (bytes.length > _maxAttachmentBytes) {
-      _showToast('图片过大，请选择 5MB 以内图片');
+      _showToast(
+        isZh
+            ? '图片过大，请选择 5MB 以内图片'
+            : 'Image is too large. Please select one within 5MB',
+      );
       return;
     }
 
     if (_pendingAttachments.length >= _maxAttachmentCount) {
-      _showToast('最多附加 $_maxAttachmentCount 张图片');
+      _showToast(
+        isZh
+            ? '最多附加 $_maxAttachmentCount 张图片'
+            : 'Up to $_maxAttachmentCount images can be attached',
+      );
       return;
     }
 
@@ -191,6 +218,7 @@ class _InputToolbarState extends State<InputToolbar>
   }
 
   Future<void> _pickFromCamera() async {
+    final isZh = _isZhLocale();
     try {
       final picked = await _imagePicker.pickImage(
         source: ImageSource.camera,
@@ -203,11 +231,12 @@ class _InputToolbarState extends State<InputToolbar>
       }
       await _tryAddAttachmentFromPath(picked.path);
     } catch (e) {
-      _showToast('拍照失败: $e');
+      _showToast(isZh ? '拍照失败: $e' : 'Failed to take photo: $e');
     }
   }
 
   Future<void> _pickFromGallery() async {
+    final isZh = _isZhLocale();
     try {
       final picked = await _imagePicker.pickImage(
         source: ImageSource.gallery,
@@ -220,13 +249,18 @@ class _InputToolbarState extends State<InputToolbar>
       }
       await _tryAddAttachmentFromPath(picked.path);
     } catch (e) {
-      _showToast('选择相册失败: $e');
+      _showToast(isZh ? '选择相册失败: $e' : 'Failed to pick photo: $e');
     }
   }
 
   Future<void> _pickFromFile() async {
     _closeAttachmentMenu();
-    _showToast('文件上传开发中，当前接口暂仅支持图片');
+    final isZh = _isZhLocale();
+    _showToast(
+      isZh
+          ? '文件上传开发中，当前接口暂仅支持图片'
+          : 'File upload is under development; current API supports images only',
+    );
   }
 
   void _removeAttachmentAt(int index) {
@@ -253,6 +287,8 @@ class _InputToolbarState extends State<InputToolbar>
   }
 
   void _showQuickCommandSheet() {
+    final isZh = _isZhLocale();
+    final quickCommands = _quickCommands(isZh);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -299,8 +335,8 @@ class _InputToolbarState extends State<InputToolbar>
                       size: 18,
                     ),
                     const SizedBox(width: 8),
-                    const Text(
-                      '快捷指令',
+                    Text(
+                      isZh ? '快捷指令' : 'Quick Commands',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -309,7 +345,7 @@ class _InputToolbarState extends State<InputToolbar>
                     const Spacer(),
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('关闭'),
+                      child: Text(isZh ? '关闭' : 'Close'),
                     ),
                   ],
                 ),
@@ -318,13 +354,13 @@ class _InputToolbarState extends State<InputToolbar>
                   constraints: const BoxConstraints(maxHeight: 320),
                   child: ListView.separated(
                     shrinkWrap: true,
-                    itemCount: _quickCommands.length,
+                    itemCount: quickCommands.length,
                     separatorBuilder: (_, __) => Divider(
                       height: 1,
                       color: Theme.of(context).dividerTheme.color,
                     ),
                     itemBuilder: (context, index) {
-                      final entry = _quickCommands[index];
+                      final entry = quickCommands[index];
                       return ListTile(
                         dense: true,
                         contentPadding: const EdgeInsets.symmetric(
@@ -662,7 +698,7 @@ class _InputToolbarState extends State<InputToolbar>
       onTap: _showQuickCommandSheet,
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        padding: const EdgeInsets.all(7),
         decoration: BoxDecoration(
           color: isDark ? AppTheme.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(10),
@@ -672,20 +708,10 @@ class _InputToolbarState extends State<InputToolbar>
                 : AppTheme.appleLightGray,
           ),
         ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.flash_on_rounded, size: 18, color: AppTheme.appleBlue),
-            SizedBox(width: 4),
-            Text(
-              '指令',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.appleBlue,
-              ),
-            ),
-          ],
+        child: const Icon(
+          Icons.flash_on_rounded,
+          size: 18,
+          color: AppTheme.appleBlue,
         ),
       ),
     );
@@ -718,10 +744,15 @@ class _InputToolbarState extends State<InputToolbar>
     }
 
     if (!widget.isConnected) {
+      final isZh = _isZhLocale();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('未连接到服务器，请先配置服务器'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(
+            isZh
+                ? '未连接到服务器，请先配置服务器'
+                : 'Not connected. Please configure a server first',
+          ),
+          duration: const Duration(seconds: 2),
         ),
       );
       return;

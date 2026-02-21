@@ -205,7 +205,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildLanguageTile(BuildContext context, AppLocalizations l10n) {
     return Consumer<ThemeProvider>(
       builder: (context, provider, child) {
-        final isZh = provider.locale.languageCode == 'zh';
+        final currentCode =
+            provider.locale?.languageCode ?? Localizations.localeOf(context).languageCode;
+        final isZh = currentCode == 'zh';
         return ListTile(
           leading: const Icon(Icons.language, color: AppTheme.appleGray),
           title: Text(l10n.language),
@@ -224,7 +226,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           onTap: () {
-            provider.toggleLocale();
+            provider.toggleLocale(Localizations.localeOf(context));
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(isZh ? 'Switched to English' : '已切换到中文'),

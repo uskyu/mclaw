@@ -29,6 +29,9 @@ class _ChatScreenState extends State<ChatScreen> {
   int _lastMessageCount = 0;
   bool _lastConnected = false;
   bool _isProgrammaticScroll = false;
+  bool _hadStreamingMessage = false;
+  String _lastStreamingMessageId = '';
+  int _lastStreamingContentLength = 0;
 
   @override
   void dispose() {
@@ -312,10 +315,45 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     const maxItems = 24;
-    if (items.length <= maxItems) {
-      return items;
+    final limited =
+        items.length <= maxItems ? items : items.sublist(items.length - maxItems);
+    return limited.reversed.toList(growable: false);
+  }
+
+  Message? _currentStreamingMessage(List<Message> messages) {
+    for (var i = messages.length - 1; i >= 0; i--) {
+      final msg = messages[i];
+      if (msg.type == MessageType.ai && msg.isLoading) {
+        return msg;
+      }
     }
-    return items.sublist(items.length - maxItems);
+    return null;
+  }
+
+  void _syncStreamingAutoFollow(List<Message> messages) {
+    final streaming = _currentStreamingMessage(messages);
+    if (streaming == null) {
+      _hadStreamingMessage = false;
+      _lastStreamingMessageId = '';
+      _lastStreamingContentLength = 0;
+      return;
+    }
+
+    final contentLength = streaming.content.length;
+    final contentChanged =
+        !_hadStreamingMessage ||
+        streaming.id != _lastStreamingMessageId ||
+        contentLength != _lastStreamingContentLength;
+
+    _hadStreamingMessage = true;
+    _lastStreamingMessageId = streaming.id;
+    _lastStreamingContentLength = contentLength;
+
+    if (contentChanged) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _runSafeScrollAction(() => _scrollToBottom(animated: false));
+      });
+    }
   }
 
   Future<void> _jumpConversation({
@@ -435,6 +473,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       );
                     }
                   }
+
+                  _syncStreamingAutoFollow(provider.messages);
 
                   if (provider.isHistoryLoading && provider.messages.isEmpty) {
                     return const Center(child: CircularProgressIndicator());

@@ -89,7 +89,9 @@ class MessageBubble extends StatelessWidget {
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (!isUser && _containsCodeFence(message.content))
+                            if (!isUser &&
+                                !message.isLoading &&
+                                _containsCodeFence(message.content))
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: Padding(
@@ -139,7 +141,10 @@ class MessageBubble extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                            _buildMarkdown(context, isUser),
+                            if (message.isLoading && !isUser)
+                              _buildStreamingText(context)
+                            else
+                              _buildMarkdown(context, isUser),
                             if (message.isLoading) ...[
                               const SizedBox(height: 8),
                               _buildStreamingIndicator(),
@@ -205,6 +210,19 @@ class MessageBubble extends StatelessWidget {
           horizontal: 10,
           vertical: 8,
         ),
+      ),
+    );
+  }
+
+  Widget _buildStreamingText(BuildContext context) {
+    final text = _normalizeMarkdownForRendering(message.content);
+    return Text(
+      text,
+      softWrap: true,
+      style: TextStyle(
+        fontSize: 14,
+        height: 1.4,
+        color: Theme.of(context).textTheme.bodyMedium?.color,
       ),
     );
   }

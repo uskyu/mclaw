@@ -19,7 +19,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  static const String _repoUrl = 'https://github.com/uskyu/clawchat-app';
+  static const String _repoUrl = 'https://github.com/uskyu/mclaw';
   bool _notificationsEnabled = true;
   bool _backgroundRunningEnabled = true;
 

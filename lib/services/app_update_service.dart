@@ -21,7 +21,7 @@ class AppUpdateService {
   static const String manifestUrl =
       'https://a3c09445.mclaw.pages.dev/update.json';
   static const String githubReleaseApi =
-      'https://api.github.com/repos/uskyu/clawchat-app/releases/latest';
+      'https://api.github.com/repos/uskyu/mclaw/releases/latest';
   static const String releasePageUrl =
       'https://a3c09445.mclaw.pages.dev/update';
 

@@ -4,7 +4,7 @@
 
 Flutter ChatGPT-like 聊天应用，通过 SSH 隧道连接 OpenClaw Gateway。
 
-**GitHub Repo**: https://github.com/uskyu/clawchat-app (private)
+**GitHub Repo**: https://github.com/uskyu/mclaw (private)
 
 ---
 

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../models/message.dart';
 import '../providers/chat_provider.dart';
+import '../providers/theme_provider.dart';
 import '../theme/app_theme.dart';
 import '../screens/server_management_screen.dart';
 import '../screens/settings_screen.dart';
@@ -392,7 +393,16 @@ class Sidebar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildActionButton(Icons.auto_awesome, 'AI', () {}),
+          Consumer<ThemeProvider>(
+            builder: (context, themeProvider, child) {
+              final isDark = themeProvider.isDarkMode;
+              return _buildActionButton(
+                isDark ? Icons.light_mode : Icons.dark_mode,
+                isDark ? '浅色' : '深色',
+                () => themeProvider.toggleTheme(),
+              );
+            },
+          ),
           _buildActionButton(Icons.settings, l10n.settings, () {
             Navigator.push(
               context,

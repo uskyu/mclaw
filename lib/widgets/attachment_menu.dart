@@ -51,6 +51,7 @@ class AttachmentMenu extends StatelessWidget {
                   Icons.insert_drive_file_outlined,
                   l10n.file,
                   onPickFile,
+                  badgeText: '开发中',
                 ),
               ),
             ],
@@ -64,31 +65,66 @@ class AttachmentMenu extends StatelessWidget {
     BuildContext context,
     IconData icon,
     String label,
-    VoidCallback onTap,
+    VoidCallback onTap, {
+    String? badgeText,
+  }
   ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? AppTheme.darkSurface
-              : AppTheme.appleLightGray.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
           children: [
-            Icon(icon, size: 28, color: AppTheme.appleGray),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).textTheme.bodyMedium?.color,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? AppTheme.darkSurface
+                    : AppTheme.appleLightGray.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 28, color: AppTheme.appleGray),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).textTheme.bodyMedium?.color,
+                    ),
+                  ),
+                ],
               ),
             ),
+            if (badgeText != null)
+              Positioned(
+                top: 2,
+                right: -24,
+                child: Transform.rotate(
+                  angle: 0.6,
+                  child: Container(
+                    width: 68,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.lobsterOrange.withValues(alpha: 0.95),
+                    ),
+                    child: Text(
+                      badgeText,
+                      style: const TextStyle(
+                        fontSize: 9,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

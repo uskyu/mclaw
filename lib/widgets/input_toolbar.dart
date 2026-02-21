@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
@@ -226,35 +225,8 @@ class _InputToolbarState extends State<InputToolbar>
   }
 
   Future<void> _pickFromFile() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: false,
-        type: FileType.custom,
-        allowedExtensions: const [
-          'jpg',
-          'jpeg',
-          'png',
-          'webp',
-          'gif',
-          'bmp',
-          'heic',
-          'heif',
-        ],
-      );
-      if (result == null || result.files.isEmpty) {
-        return;
-      }
-
-      final path = result.files.single.path;
-      if (path == null || path.isEmpty) {
-        _showToast('读取文件失败');
-        return;
-      }
-
-      await _tryAddAttachmentFromPath(path);
-    } catch (e) {
-      _showToast('选择文件失败: $e');
-    }
+    _closeAttachmentMenu();
+    _showToast('文件上传开发中，当前接口暂仅支持图片');
   }
 
   void _removeAttachmentAt(int index) {

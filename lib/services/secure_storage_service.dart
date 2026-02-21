@@ -14,6 +14,7 @@ class SecureStorageService {
   static const _activeServerIdKey = 'active_server_id';
   static const _conversationNotesKey = 'conversation_notes';
   static const _lastSessionByServerKey = 'last_session_by_server';
+  static const _themeDarkModeKey = 'theme_dark_mode';
 
   /// 保存服务器列表
   static Future<void> saveServers(List<Server> servers) async {
@@ -140,6 +141,27 @@ class SecureStorageService {
       print('加载会话备注失败: $e');
       return {};
     }
+  }
+
+  static Future<void> saveThemeDarkMode(bool isDarkMode) async {
+    await _storage.write(
+      key: _themeDarkModeKey,
+      value: isDarkMode ? '1' : '0',
+    );
+  }
+
+  static Future<bool?> loadThemeDarkMode() async {
+    final value = await _storage.read(key: _themeDarkModeKey);
+    if (value == null) {
+      return null;
+    }
+    if (value == '1') {
+      return true;
+    }
+    if (value == '0') {
+      return false;
+    }
+    return null;
   }
 
   /// 删除所有数据

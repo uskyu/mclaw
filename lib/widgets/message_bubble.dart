@@ -84,7 +84,7 @@ class MessageBubble extends StatelessWidget {
                       bottomRight: Radius.circular(isUser ? 4 : 18),
                     ),
                   ),
-                  child: message.isLoading
+                  child: (message.isLoading && !hasTextContent)
                       ? _buildLoadingIndicator(l10n)
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,6 +140,10 @@ class MessageBubble extends StatelessWidget {
                                 ),
                               ),
                             _buildMarkdown(context, isUser),
+                            if (message.isLoading) ...[
+                              const SizedBox(height: 8),
+                              _buildStreamingIndicator(),
+                            ],
                           ],
                         ),
                 ),
@@ -318,6 +322,32 @@ class MessageBubble extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             color: AppTheme.appleGray.withValues(alpha: 0.8),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStreamingIndicator() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.8,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              AppTheme.appleGray.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '流式输出中',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppTheme.appleGray.withValues(alpha: 0.85),
           ),
         ),
       ],

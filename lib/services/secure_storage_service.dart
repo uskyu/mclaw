@@ -15,6 +15,9 @@ class SecureStorageService {
   static const _conversationNotesKey = 'conversation_notes';
   static const _lastSessionByServerKey = 'last_session_by_server';
   static const _themeDarkModeKey = 'theme_dark_mode';
+  static const _notificationsEnabledKey = 'notifications_enabled';
+  static const _backgroundRunningEnabledKey = 'background_running_enabled';
+  static const _runtimePermissionPromptedKey = 'runtime_permission_prompted';
 
   /// 保存服务器列表
   static Future<void> saveServers(List<Server> servers) async {
@@ -152,6 +155,69 @@ class SecureStorageService {
 
   static Future<bool?> loadThemeDarkMode() async {
     final value = await _storage.read(key: _themeDarkModeKey);
+    if (value == null) {
+      return null;
+    }
+    if (value == '1') {
+      return true;
+    }
+    if (value == '0') {
+      return false;
+    }
+    return null;
+  }
+
+  static Future<void> saveNotificationsEnabled(bool enabled) async {
+    await _storage.write(
+      key: _notificationsEnabledKey,
+      value: enabled ? '1' : '0',
+    );
+  }
+
+  static Future<bool?> loadNotificationsEnabled() async {
+    final value = await _storage.read(key: _notificationsEnabledKey);
+    if (value == null) {
+      return null;
+    }
+    if (value == '1') {
+      return true;
+    }
+    if (value == '0') {
+      return false;
+    }
+    return null;
+  }
+
+  static Future<void> saveBackgroundRunningEnabled(bool enabled) async {
+    await _storage.write(
+      key: _backgroundRunningEnabledKey,
+      value: enabled ? '1' : '0',
+    );
+  }
+
+  static Future<bool?> loadBackgroundRunningEnabled() async {
+    final value = await _storage.read(key: _backgroundRunningEnabledKey);
+    if (value == null) {
+      return null;
+    }
+    if (value == '1') {
+      return true;
+    }
+    if (value == '0') {
+      return false;
+    }
+    return null;
+  }
+
+  static Future<void> saveRuntimePermissionPrompted(bool prompted) async {
+    await _storage.write(
+      key: _runtimePermissionPromptedKey,
+      value: prompted ? '1' : '0',
+    );
+  }
+
+  static Future<bool?> loadRuntimePermissionPrompted() async {
+    final value = await _storage.read(key: _runtimePermissionPromptedKey);
     if (value == null) {
       return null;
     }

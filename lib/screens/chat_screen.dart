@@ -12,6 +12,9 @@ import '../widgets/input_toolbar.dart';
 import '../widgets/right_drawers.dart';
 import '../widgets/app_logo.dart';
 import '../providers/chat_provider.dart';
+import '../services/background_runtime_service.dart';
+import '../services/notification_service.dart';
+import '../services/secure_storage_service.dart';
 import 'server_management_screen.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -21,7 +24,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _scrollController = ScrollController();
   final Map<int, GlobalKey> _messageKeys = <int, GlobalKey>{};
@@ -33,12 +36,137 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _hadStreamingMessage = false;
   String _lastStreamingMessageId = '';
   int _lastStreamingContentLength = 0;
+  bool _runtimeBootstrapped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    NotificationService.instance.setAppForeground(true);
+    _bootstrapRuntimeFeatures();
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scrollButtonsTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final isForeground = state == AppLifecycleState.resumed;
+    NotificationService.instance.setAppForeground(isForeground);
+  }
+
+  Future<void> _bootstrapRuntimeFeatures() async {
+    if (_runtimeBootstrapped) {
+      return;
+    }
+    _runtimeBootstrapped = true;
+
+    final storedNotifications =
+        await SecureStorageService.loadNotificationsEnabled();
+    final storedBackground =
+        await SecureStorageService.loadBackgroundRunningEnabled();
+    final notificationsEnabled = storedNotifications ?? true;
+    final backgroundEnabled = storedBackground ?? true;
+
+    if (storedNotifications == null) {
+      await SecureStorageService.saveNotificationsEnabled(true);
+    }
+    if (storedBackground == null) {
+      await SecureStorageService.saveBackgroundRunningEnabled(true);
+    }
+
+    final prompted =
+        await SecureStorageService.loadRuntimePermissionPrompted() ?? false;
+    if (!mounted) {
+      return;
+    }
+
+    if (!prompted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _showRuntimePermissionDialog(
+          notificationsEnabled: notificationsEnabled,
+          backgroundEnabled: backgroundEnabled,
+        );
+      });
+      return;
+    }
+
+    if (backgroundEnabled) {
+      await BackgroundRuntimeService.instance.enable();
+    }
+  }
+
+  Future<void> _showRuntimePermissionDialog({
+    required bool notificationsEnabled,
+    required bool backgroundEnabled,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final accepted =
+            await showDialog<bool>(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => AlertDialog(
+                title: Text(isZh ? '开启通知与后台运行' : 'Enable Notifications & Background'),
+                content: Text(
+                  isZh
+                      ? 'MClaw 默认开启通知和后台运行。\n允许通知后，长任务完成会推送提醒。'
+                      : 'MClaw enables notifications and background runtime by default. Allow notifications to receive long-task completion alerts.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text(isZh ? '稍后' : 'Later'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: Text(isZh ? '允许并开启' : 'Allow & Enable'),
+                  ),
+                ],
+              ),
+            ) ??
+        false;
+
+    await SecureStorageService.saveRuntimePermissionPrompted(true);
+
+    if (!accepted) {
+      await SecureStorageService.saveNotificationsEnabled(false);
+      await SecureStorageService.saveBackgroundRunningEnabled(false);
+      return;
+    }
+
+    var granted = true;
+    if (notificationsEnabled) {
+      granted = await NotificationService.instance.requestPermission();
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (backgroundEnabled && granted) {
+      await BackgroundRuntimeService.instance.enable();
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          granted
+              ? (isZh ? '已开启通知与后台运行' : 'Notifications and background runtime enabled')
+              : (isZh
+                    ? '未授予通知权限，后台运行仍可在设置中管理'
+                    : 'Notification permission denied; background runtime can still be managed in Settings'),
+        ),
+      ),
+    );
   }
 
   void _setScrollButtonsVisible(bool visible) {

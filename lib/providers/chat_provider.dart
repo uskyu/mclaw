@@ -6,6 +6,7 @@ import '../models/agent.dart';
 import '../models/server.dart';
 import '../services/gateway_service.dart';
 import '../services/gateway_protocol_service.dart';
+import '../services/notification_service.dart';
 import '../services/secure_storage_service.dart';
 
 class ChatProvider with ChangeNotifier {
@@ -37,6 +38,7 @@ class ChatProvider with ChangeNotifier {
 
   // 流式输出状态
   String _streamingContent = '';
+  String _lastFinalizedContent = '';
   String? _currentRunId;
   final Set<String> _pendingRuns = {};
 
@@ -330,12 +332,14 @@ class ChatProvider with ChangeNotifier {
 
   bool _finalizeStreamingMessage(String? runId) {
     if (_streamingContent.isEmpty) {
+      _lastFinalizedContent = '';
       return false;
     }
 
     final formatted = _formatQuickCommandResponse(_streamingContent);
     if (formatted.trim().isEmpty) {
       _streamingContent = '';
+      _lastFinalizedContent = '';
       return false;
     }
 
@@ -349,7 +353,27 @@ class ChatProvider with ChangeNotifier {
     );
     _upsertMessage(aiMessage);
     _streamingContent = '';
+    _lastFinalizedContent = formatted;
     return true;
+  }
+
+  Future<void> _notifyCompletionIfNeeded(String content) async {
+    final notificationsEnabled =
+        await SecureStorageService.loadNotificationsEnabled() ?? true;
+    if (!notificationsEnabled || NotificationService.instance.isAppForeground) {
+      return;
+    }
+
+    final normalized = content.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final preview = normalized.isEmpty
+        ? '任务已完成'
+        : (normalized.length > 90
+              ? '${normalized.substring(0, 90)}...'
+              : normalized);
+    await NotificationService.instance.showTaskCompletedNotification(
+      title: 'MClaw 任务已完成',
+      body: preview,
+    );
   }
 
   String _extractText(dynamic content, {String? role}) {
@@ -463,6 +487,7 @@ class ChatProvider with ChangeNotifier {
           _clearPendingRun(event.runId);
           _scheduleConversationRefresh();
           if (committed) {
+            unawaited(_notifyCompletionIfNeeded(_lastFinalizedContent));
             notifyListeners();
           }
         } else if (phase == 'error') {
@@ -481,10 +506,13 @@ class ChatProvider with ChangeNotifier {
       case 'done':
         // 流式完成
         print('agent done, content length: ${_streamingContent.length}');
-        _finalizeStreamingMessage(event.runId);
+        final committed = _finalizeStreamingMessage(event.runId);
         _removeLoadingMessage();
         _clearPendingRun(event.runId);
         _scheduleConversationRefresh();
+        if (committed) {
+          unawaited(_notifyCompletionIfNeeded(_lastFinalizedContent));
+        }
         notifyListeners();
         break;
 

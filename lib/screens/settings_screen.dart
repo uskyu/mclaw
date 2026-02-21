@@ -1,17 +1,87 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../l10n/app_localizations.dart';
-import '../theme/app_theme.dart';
 import '../providers/theme_provider.dart';
+import '../services/background_runtime_service.dart';
+import '../services/notification_service.dart';
+import '../services/secure_storage_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/app_logo.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  static const String _repoUrl = 'https://github.com/uskyu/clawchat-app';
+  bool _notificationsEnabled = true;
+  bool _backgroundRunningEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final notifications = await SecureStorageService.loadNotificationsEnabled();
+    final background = await SecureStorageService.loadBackgroundRunningEnabled();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      if (notifications != null) {
+        _notificationsEnabled = notifications;
+      }
+      if (background != null) {
+        _backgroundRunningEnabled = background;
+      }
+    });
+  }
+
+  bool _isZh(BuildContext context) {
+    return Localizations.localeOf(context).languageCode == 'zh';
+  }
+
+  Future<void> _setNotificationsEnabled(bool enabled) async {
+    if (enabled) {
+      final granted = await NotificationService.instance.requestPermission();
+      if (!granted && mounted) {
+        final isZh = _isZh(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isZh
+                  ? '通知权限未授予，可能无法收到完成提醒'
+                  : 'Notification permission is not granted; completion alerts may be unavailable',
+            ),
+          ),
+        );
+      }
+    }
+    setState(() => _notificationsEnabled = enabled);
+    await SecureStorageService.saveNotificationsEnabled(enabled);
+  }
+
+  Future<void> _setBackgroundRunningEnabled(bool enabled) async {
+    setState(() => _backgroundRunningEnabled = enabled);
+    await SecureStorageService.saveBackgroundRunningEnabled(enabled);
+    if (enabled) {
+      await BackgroundRuntimeService.instance.enable();
+    } else {
+      await BackgroundRuntimeService.instance.disable();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+    final isZh = _isZh(context);
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -22,52 +92,29 @@ class SettingsScreen extends StatelessWidget {
       ),
       body: ListView(
         children: [
-          // 用户信息
-          _buildUserSection(context),
+          _buildUserSection(context, isZh),
           const Divider(),
-          // 外观
-          _buildSectionHeader(l10n.appearance),
-          _buildDarkModeTile(l10n),
-          const Divider(),
-          // 通用
           _buildSectionHeader(l10n.general),
           _buildLanguageTile(context, l10n),
-          _buildListTile(
-            icon: Icons.notifications_outlined,
-            title: l10n.notifications,
-            onTap: () {},
-          ),
+          _buildNotificationsTile(context, l10n),
+          _buildBackgroundRuntimeTile(context, isZh),
           _buildListTile(
             icon: Icons.lock_outline,
             title: l10n.privacy,
-            onTap: () {},
+            onTap: () => _showPrivacyDialog(context, isZh),
           ),
           const Divider(),
-          // 关于
           _buildSectionHeader(l10n.about),
           _buildListTile(
             icon: Icons.info_outline,
             title: l10n.aboutApp,
             subtitle: 'v1.0.0',
-            onTap: () {},
+            onTap: () => _showAboutDialog(context, isZh),
           ),
           _buildListTile(
             icon: Icons.help_outline,
             title: l10n.help,
-            onTap: () {},
-          ),
-          const Divider(),
-          // 危险区域
-          _buildSectionHeader(l10n.dangerZone, isDanger: true),
-          _buildDangerTile(
-            icon: Icons.delete_outline,
-            title: l10n.clearAllData,
-            onTap: () => _showClearDataDialog(context, l10n),
-          ),
-          _buildDangerTile(
-            icon: Icons.person_remove_outlined,
-            title: l10n.deleteAccount,
-            onTap: () => _showDeleteAccountDialog(context, l10n),
+            onTap: () => _showHelpDialog(context, isZh),
           ),
           const SizedBox(height: 32),
         ],
@@ -75,7 +122,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildUserSection(BuildContext context) {
+  Widget _buildUserSection(BuildContext context, bool isZh) {
     return ListTile(
       leading: Container(
         width: 50,
@@ -93,22 +140,20 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
       ),
-      title: const Text(
-        'User',
-        style: TextStyle(
+      title: Text(
+        isZh ? 'MClaw 用户功能' : 'MClaw User Features',
+        style: const TextStyle(
           fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
       ),
       subtitle: Text(
-        'user@example.com',
+        isZh ? '待开发' : 'Coming soon',
         style: TextStyle(
           fontSize: 13,
           color: Theme.of(context).textTheme.bodySmall?.color,
         ),
       ),
-      trailing: const Icon(Icons.chevron_right, color: AppTheme.appleGray),
-      onTap: () {},
     );
   }
 
@@ -123,19 +168,6 @@ class SettingsScreen extends StatelessWidget {
           color: isDanger ? AppTheme.appleRed : AppTheme.appleGray,
         ),
       ),
-    );
-  }
-
-  Widget _buildDarkModeTile(AppLocalizations l10n) {
-    return Consumer<ThemeProvider>(
-      builder: (context, provider, child) {
-        return SwitchListTile(
-          secondary: const Icon(Icons.dark_mode_outlined, color: AppTheme.appleGray),
-          title: Text(l10n.darkMode),
-          value: provider.isDarkMode,
-          onChanged: (value) => provider.setDarkMode(value),
-        );
-      },
     );
   }
 
@@ -174,6 +206,25 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildNotificationsTile(BuildContext context, AppLocalizations l10n) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.notifications_outlined, color: AppTheme.appleGray),
+      title: Text(l10n.notifications),
+      value: _notificationsEnabled,
+      onChanged: (value) => _setNotificationsEnabled(value),
+    );
+  }
+
+  Widget _buildBackgroundRuntimeTile(BuildContext context, bool isZh) {
+    return SwitchListTile(
+      secondary: const Icon(Icons.run_circle_outlined, color: AppTheme.appleGray),
+      title: Text(isZh ? '后台运行' : 'Background Running'),
+      subtitle: Text(isZh ? '保持连接与任务状态' : 'Keep connection and task state'),
+      value: _backgroundRunningEnabled,
+      onChanged: (value) => _setBackgroundRunningEnabled(value),
+    );
+  }
+
   Widget _buildListTile({
     required IconData icon,
     required String title,
@@ -189,65 +240,60 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDangerTile({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: AppTheme.appleRed),
-      title: Text(
-        title,
-        style: const TextStyle(color: AppTheme.appleRed),
-      ),
-      onTap: onTap,
-    );
-  }
-
-  void _showClearDataDialog(BuildContext context, AppLocalizations l10n) {
+  void _showPrivacyDialog(BuildContext context, bool isZh) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.clearAllData),
-        content: Text('${l10n.clearAllData} ?'),
+        title: Text(isZh ? '隐私说明' : 'Privacy'),
+        content: Text(
+          isZh
+              ? '项目开源地址:\n$_repoUrl\n\n所有聊天数据、配置与记录默认保存在本地设备，不会主动上传到第三方服务。'
+              : 'Open-source repository:\n$_repoUrl\n\nAll chat data, settings, and records are stored locally on your device by default and are not uploaded to third-party services proactively.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(l10n.cancel),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(l10n.clearAllData)),
-              );
-            },
-            child: Text(l10n.clearAllData, style: const TextStyle(color: AppTheme.appleRed)),
+            child: Text(isZh ? '我知道了' : 'Got it'),
           ),
         ],
       ),
     );
   }
 
-  void _showDeleteAccountDialog(BuildContext context, AppLocalizations l10n) {
+  void _showAboutDialog(BuildContext context, bool isZh) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.deleteAccount),
-        content: Text('${l10n.deleteAccount} ?'),
+        title: Text(isZh ? '关于开发者' : 'About Developer'),
+        content: Text(
+          isZh
+              ? '应用名称: MClaw\n版本: 1.0.0\n开发者: uskyu\n定位: 面向 OpenClaw 的移动端客户端。'
+              : 'App: MClaw\nVersion: 1.0.0\nDeveloper: uskyu\nPositioning: A mobile client for OpenClaw.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(l10n.cancel),
+            child: Text(isZh ? '关闭' : 'Close'),
           ),
+        ],
+      ),
+    );
+  }
+
+  void _showHelpDialog(BuildContext context, bool isZh) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isZh ? '使用流程' : 'How to Use'),
+        content: Text(
+          isZh
+              ? '1. 进入服务器管理，添加服务器。\n2. 点击自动检测/修复网关配置。\n3. 连接成功后返回聊天页。\n4. 输入消息或发送图片，等待流式响应。\n5. 需要时在侧边栏切换主题和管理会话。'
+              : '1. Open Server Management and add a server.\n2. Run auto-detect/auto-fix for gateway config.\n3. Return to chat after connection succeeds.\n4. Send text or images and wait for streaming responses.\n5. Use the sidebar for theme switching and session management.',
+        ),
+        actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(l10n.deleteAccount)),
-              );
-            },
-            child: Text(l10n.deleteAccount, style: const TextStyle(color: AppTheme.appleRed)),
+            onPressed: () => Navigator.pop(context),
+            child: Text(isZh ? '知道了' : 'OK'),
           ),
         ],
       ),

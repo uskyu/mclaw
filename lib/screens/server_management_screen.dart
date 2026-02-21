@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import '../models/server.dart';
+import '../providers/chat_provider.dart';
 import '../services/secure_storage_service.dart';
 import '../services/gateway_service.dart';
 import '../services/ssh_config_service.dart';
@@ -264,7 +265,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
 
   Future<void> _activateServer(Server server) async {
     if (server.type == ServerType.openclaw) {
-      final gatewayService = context.read<GatewayService>();
+      final chatProvider = context.read<ChatProvider>();
 
       showDialog(
         context: context,
@@ -272,7 +273,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
-      final success = await gatewayService.connect(server);
+      final success = await chatProvider.connectToServer(server);
 
       if (mounted) Navigator.pop(context);
 
@@ -294,7 +295,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
           );
           Navigator.pop(context);
         } else {
-          final errorMsg = gatewayService.errorMessage ?? '';
+          final errorMsg = chatProvider.errorMessage ?? '';
 
           // 检查是否是 CORS 相关错误
           if (_isCorsError(errorMsg)) {
@@ -497,7 +498,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
   }
 
   Future<void> _testConnection(Server server) async {
-    final gatewayService = context.read<GatewayService>();
+    final chatProvider = context.read<ChatProvider>();
 
     // 显示加载中
     showDialog(
@@ -507,7 +508,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
     );
 
     // 尝试连接
-    final success = await gatewayService.connect(server);
+    final success = await chatProvider.connectToServer(server);
 
     if (mounted) Navigator.pop(context);
 
@@ -529,7 +530,7 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
           ),
         );
       } else {
-        final errorMsg = gatewayService.errorMessage ?? '';
+        final errorMsg = chatProvider.errorMessage ?? '';
 
         // 检查是否是 CORS 相关错误
         if (_isCorsError(errorMsg)) {
@@ -849,8 +850,8 @@ class _ServerManagementScreenState extends State<ServerManagementScreen> {
               await _saveServers();
 
               if (server.isActive) {
-                final gatewayService = context.read<GatewayService>();
-                await gatewayService.disconnect();
+                final chatProvider = context.read<ChatProvider>();
+                await chatProvider.disconnect();
               }
 
               if (mounted) Navigator.pop(context);

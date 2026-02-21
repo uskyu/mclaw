@@ -244,6 +244,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ListTile(
       leading: const Icon(Icons.notifications_outlined, color: AppTheme.appleGray),
       title: Text(l10n.notifications),
+      subtitle: Text(
+        isZh
+            ? '建议开启通知并关闭省电管理，保障后台任务提醒'
+            : 'Enable notifications and disable battery optimization for reliable background alerts',
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

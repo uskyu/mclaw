@@ -388,14 +388,9 @@ class ChatProvider with ChangeNotifier {
       return _normalizeHistoryAttachmentText(content, role: role);
     } else if (content is List) {
       final buffer = StringBuffer();
-      var hasImagePart = false;
       for (final item in content) {
         if (item is Map) {
           final text = item['text'];
-          final type = item['type']?.toString() ?? '';
-          if (type.contains('image') || item['image'] != null) {
-            hasImagePart = true;
-          }
           if (text is String) {
             buffer.write(text);
           }
@@ -407,9 +402,6 @@ class ChatProvider with ChangeNotifier {
       );
       if (value.trim().isNotEmpty) {
         return value;
-      }
-      if ((role == 'user' || role == null) && hasImagePart) {
-        return '📎 已发送图片';
       }
       return '';
     }
@@ -449,9 +441,9 @@ class ChatProvider with ChangeNotifier {
     }
 
     if (userParts.isNotEmpty) {
-      return '📎 已发送图片\n${userParts.join('\n')}';
+      return userParts.join('\n');
     }
-    return '📎 已发送图片';
+    return '';
   }
 
   /// 处理 agent 事件 - 流式输出

@@ -60,11 +60,11 @@ flutter build apk --release
 
 ## 界面预览
 
-![首页](./update_hosting/PNG/index.jpg)
-
-![服务器配置](./update_hosting/PNG/sever.jpg)
-
-![侧边栏](./update_hosting/PNG/insder.jpg)
+<p align="center">
+  <img src="./update_hosting/PNG/index.jpg" alt="首页" width="32%" />
+  <img src="./update_hosting/PNG/sever.jpg" alt="服务器配置" width="32%" />
+  <img src="./update_hosting/PNG/insder.jpg" alt="侧边栏" width="32%" />
+</p>
 
 ## 开源协议
 

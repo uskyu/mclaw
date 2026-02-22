@@ -60,11 +60,11 @@ Click-to-open image:
 
 ## Screenshots
 
-![Home](./update_hosting/PNG/index.jpg)
-
-![Server Setup](./update_hosting/PNG/sever.jpg)
-
-![Sidebar](./update_hosting/PNG/insder.jpg)
+<p align="center">
+  <img src="./update_hosting/PNG/index.jpg" alt="Home" width="32%" />
+  <img src="./update_hosting/PNG/sever.jpg" alt="Server Setup" width="32%" />
+  <img src="./update_hosting/PNG/insder.jpg" alt="Sidebar" width="32%" />
+</p>
 
 ## License
 

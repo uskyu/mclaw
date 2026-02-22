@@ -58,6 +58,14 @@ Click-to-open image:
 [![Home](./assets/screenshots/home.png)](./assets/screenshots/home.png)
 ```
 
+## Screenshots
+
+![Home](./update_hosting/PNG/index.jpg)
+
+![Server Setup](./update_hosting/PNG/sever.jpg)
+
+![Sidebar](./update_hosting/PNG/insder.jpg)
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).

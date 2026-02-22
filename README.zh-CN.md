@@ -58,6 +58,14 @@ flutter build apk --release
 [![首页](./assets/screenshots/home.png)](./assets/screenshots/home.png)
 ```
 
+## 界面预览
+
+![首页](./update_hosting/PNG/index.jpg)
+
+![服务器配置](./update_hosting/PNG/sever.jpg)
+
+![侧边栏](./update_hosting/PNG/insder.jpg)
+
 ## 开源协议
 
 MIT，详见 [LICENSE](./LICENSE)。

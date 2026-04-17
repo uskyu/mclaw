@@ -1,0 +1,361 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.4.14",
+    "lastTouchedAt": "2026-04-14T14:02:12.659Z"
+  },
+  "wizard": {
+    "lastRunAt": "2026-03-07T07:46:58.839Z",
+    "lastRunVersion": "2026.3.2",
+    "lastRunCommand": "doctor",
+    "lastRunMode": "local"
+  },
+  "browser": {
+    "enabled": true,
+    "executablePath": "/usr/bin/chromium-browser",
+    "headless": true,
+    "noSandbox": true,
+    "defaultProfile": "openclaw"
+  },
+  "auth": {
+    "profiles": {
+      "kimi-coding:default": {
+        "provider": "kimi-coding",
+        "mode": "api_key"
+      },
+      "zhipu:default": {
+        "provider": "zhipu",
+        "mode": "api_key"
+      },
+      "flux-code:default": {
+        "provider": "flux-code",
+        "mode": "api_key"
+      }
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "flux-code": {
+        "baseUrl": "http://142.171.85.117:3480/v1",
+        "apiKey": "sk-yQ5YWQRx4disDghoBQtaFYbkPvn3HUcnmAX0BJxXC5Cs5OkZ",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "gpt-5.1",
+            "name": "GPT-5.1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 400000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "gpt-5.2",
+            "name": "GPT-5.2",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 400000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "gpt-5.4",
+            "name": "GPT-5.4",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1100000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "gpt-5.3-codex",
+            "name": "GPT-5.3 Codex",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 400000,
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "infini-ai": {
+        "baseUrl": "https://demo.ovoapi.com",
+        "apiKey": "sk-MVtER7Q12zcGN2NWrIIAyTQAClYa4U6El6LaEqW0pYznJ0yQ",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "glm-5",
+            "name": "GLM-5",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "minimax-m2.7",
+            "name": "MiniMax M2.7",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "kimi-k2.5",
+            "name": "Kimi K2.5",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 262144,
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "zhipu": {
+        "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+        "apiKey": "a95faa95b44d4b0ea4997cb43f590c16.LmBW3L89J2Gy2zOP",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "glm-5.1",
+            "name": "GLM-5.1",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "glm-5-turbo",
+            "name": "GLM-5-Turbo",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "infini-ai/minimax-m2.7"
+      },
+      "models": {
+        "flux-code/gpt-5.1": {
+          "alias": "GPT-5.1"
+        },
+        "flux-code/gpt-5.2": {
+          "alias": "GPT-5.2"
+        },
+        "flux-code/gpt-5.4": {
+          "alias": "GPT-5.4"
+        },
+        "flux-code/gpt-5.3-codex": {
+          "alias": "Codex"
+        },
+        "infini-ai/glm-5": {
+          "alias": "GLM-5"
+        },
+        "infini-ai/minimax-m2.7": {
+          "alias": "M2.7"
+        },
+        "infini-ai/kimi-k2.5": {
+          "alias": "Kimi"
+        },
+        "zhipu/glm-5.1": {
+          "alias": "GLM-5.1"
+        },
+        "zhipu/glm-5-turbo": {
+          "alias": "GLM-5-Turbo"
+        }
+      },
+      "workspace": "/root/.openclaw/workspace",
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      }
+    }
+  },
+  "messages": {
+    "ackReactionScope": "group-mentions"
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "channels": {
+    "telegram": {
+      "enabled": false,
+      "dmPolicy": "pairing",
+      "botToken": "8194789690:AAFfHvmL5Qy6LeUzceBl86TFK7mpYQbsAyY",
+      "groupPolicy": "allowlist",
+      "streaming": {
+        "mode": "off"
+      }
+    },
+    "feishu": {
+      "enabled": true,
+      "domain": "feishu",
+      "accounts": {
+        "main": {
+          "appId": "cli_a9216e6aeba29bc0",
+          "appSecret": "Rp89u8VQDTY0GKngwOjUHfstYKGduaNO"
+        },
+        "default": {
+          "dmPolicy": "pairing"
+        }
+      },
+      "tools": {
+        "doc": true,
+        "wiki": true,
+        "drive": true,
+        "perm": true,
+        "scopes": true
+      }
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "lan",
+    "controlUi": {
+      "allowedOrigins": [
+        "*"
+      ],
+      "allowInsecureAuth": false
+    },
+    "auth": {
+      "mode": "token",
+      "token": "2b45d4a2bbcfb1609082662ae614bb7045299de52e243234",
+      "rateLimit": {
+        "maxAttempts": 10,
+        "windowMs": 60000,
+        "lockoutMs": 300000
+      }
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
+    "nodes": {}
+  },
+  "plugins": {
+    "load": {
+      "paths": []
+    },
+    "entries": {
+      "telegram": {
+        "enabled": true
+      },
+      "feishu": {
+        "enabled": true
+      },
+      "acpx": {
+        "enabled": false
+      },
+      "browser": {
+        "enabled": true
+      }
+    },
+    "installs": {
+      "feishu": {
+        "source": "npm",
+        "spec": "@openclaw/feishu",
+        "installPath": "/root/.openclaw/extensions/feishu",
+        "version": "2026.3.2",
+        "resolvedName": "@openclaw/feishu",
+        "resolvedVersion": "2026.3.2",
+        "resolvedSpec": "@openclaw/feishu@2026.3.2",
+        "integrity": "sha512-CpwjmLCS8gpZ5fFCRiEA+1i/L+E73Vhz5//TiwQjWJOtVPZEu44db294g3HUR6nB5L0IEpZgKU/JU69HgYl77w==",
+        "shasum": "ad77e27633b480f5c815e1922252a2f07c1765bd",
+        "resolvedAt": "2026-03-07T07:26:21.946Z",
+        "installedAt": "2026-03-07T07:26:26.430Z"
+      }
+    },
+    "allow": [
+      "feishu",
+      "telegram",
+      "browser",
+      "memory-core"
+    ]
+  }
+}
